@@ -232,6 +232,9 @@ typedef struct
 #endif
 #include <vulkan/vulkan.h>
 
+#undef EXTERN_C
+#include "openvr_capi.h"
+
 #ifndef APIENTRY
 #define	APIENTRY
 #endif
