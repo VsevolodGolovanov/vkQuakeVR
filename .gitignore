@@ -1,0 +1,16 @@
+*.suo
+*.VC.db
+*.vcxproj.user
+Misc/vq_pak/vkquake.pak
+Quake/*.dll
+Quake/*.o
+Quake/history.txt
+Quake/id1/
+Quake/vkquake
+Quake/vkQuake.exe
+Quake/vkQuake.res
+Windows/VisualStudio/Build-vkQuake/
+Windows/VisualStudio/id1/
+Shaders/Compiled/*spv
+Shaders/bintoc.exe
+Shaders/bintoc.obj
