@@ -41,6 +41,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define	QUAKESPASM_VER_PATCH	2	// helper to print a string like 0.92.1
 #define	VKQUAKE_VERSION		0.94
 #define	VKQUAKE_VER_PATCH	0	// helper to print a string like 0.92.1
+#define	VKQUAKEVR_VERSION	0.01
+#define	VKQUAKEVR_VER_PATCH	0	// helper to print a string like 0.92.1
 
 //define	PARANOID			// speed sapping error checking
 

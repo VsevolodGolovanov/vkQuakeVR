@@ -6,10 +6,10 @@ Quake/*.dll
 Quake/*.o
 Quake/history.txt
 Quake/id1/
-Quake/vkquake
-Quake/vkQuake.exe
-Quake/vkQuake.res
-Windows/VisualStudio/Build-vkQuake/
+Quake/vkquakevr
+Quake/vkQuakeVR.exe
+Quake/vkQuakeVR.res
+Windows/VisualStudio/Build-vkQuakeVR/
 Windows/VisualStudio/id1/
 Shaders/Compiled/*spv
 Shaders/bintoc.exe

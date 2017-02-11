@@ -109,6 +109,8 @@ int main(int argc, char *argv[])
 		QUAKESPASM_VERSION, QUAKESPASM_VER_PATCH);
 	Sys_Printf( "vkQuake %1.2f.%d (c) Axel Gneiting\n",
 		VKQUAKE_VERSION, VKQUAKE_VER_PATCH );
+	Sys_Printf("vkQuakeVR %1.2f.%d (c) Felix Rueegg\n",
+		VKQUAKEVR_VERSION, VKQUAKEVR_VER_PATCH);
 
 	Sys_Printf("Host_Init\n");
 	Host_Init();
