@@ -241,6 +241,7 @@ typedef struct
 
 #include "console.h"
 #include "wad.h"
+#include "vr.h"
 #include "vid.h"
 #include "screen.h"
 #include "draw.h"

@@ -1853,7 +1853,7 @@ struct VR_IVRResources_FnTable
 };
 
 
-#if 0
+
 // Global entry points
 S_API intptr_t VR_InitInternal( EVRInitError *peError, EVRApplicationType eType );
 S_API void VR_ShutdownInternal();
@@ -1862,7 +1862,7 @@ S_API intptr_t VR_GetGenericInterface( const char *pchInterfaceVersion, EVRInitE
 S_API bool VR_IsRuntimeInstalled();
 S_API const char * VR_GetVRInitErrorAsSymbol( EVRInitError error );
 S_API const char * VR_GetVRInitErrorAsEnglishDescription( EVRInitError error );
-#endif
+
 
 #endif // __OPENVR_API_FLAT_H__
 

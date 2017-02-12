@@ -859,6 +859,7 @@ void Host_Init (void)
 		ExtraMaps_Init (); //johnfitz
 		Modlist_Init (); //johnfitz
 		DemoList_Init (); //ericw
+		VR_Init ();
 		VID_Init ();
 		IN_Init ();
 		TexMgr_Init (); //johnfitz
@@ -932,6 +933,7 @@ void Host_Shutdown(void)
 		S_Shutdown ();
 		IN_Shutdown ();
 		VID_Shutdown();
+		VR_Shutdown ();
 	}
 
 	LOG_Close ();
