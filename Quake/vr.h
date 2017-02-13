@@ -31,8 +31,11 @@ typedef struct
 
 extern	vrdef_t vr;				// global vr state
 
-void	VR_Init (void);
-void	VR_Shutdown (void);
+void		VR_Init (void);
+void		VR_Shutdown (void);
+
+uint32_t	VR_GetVulkanInstanceExtensionsRequired(char *extension_names, uint32_t buffer_size);
+uint32_t	VR_GetVulkanDeviceExtensionsRequired(struct VkPhysicalDevice_T *physical_device, char *extension_names, uint32_t buffer_size);
 
 #endif	/* __VR_DEFS_H */
 

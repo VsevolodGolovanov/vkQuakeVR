@@ -4,6 +4,7 @@ Copyright (C) 2002-2009 John Fitzgibbons and others
 Copyright (C) 2007-2008 Kristian Duske
 Copyright (C) 2010-2014 QuakeSpasm developers
 Copyright (C) 2016 Axel Gneiting
+Copyright (C) 2017 Felix Rueegg
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -38,6 +39,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define MAXWIDTH		10000
 #define MAXHEIGHT		10000
 
+#define MAX_ENABLED_EXTENSIONS 16
 #define NUM_COMMAND_BUFFERS 2
 #define MAX_SWAP_CHAIN_IMAGES 8
 #define COLOR_BUFFER_FORMAT VK_FORMAT_R8G8B8A8_UNORM
@@ -521,80 +523,155 @@ void GL_SetObjectName(uint64_t object, VkDebugReportObjectTypeEXT objectType, co
 
 /*
 ===============
+AddExtension
+
+adds an extension name to the array of strings containing the names of vulkan extensions
+to enable for the created instance/device
+===============
+*/
+static void AddExtension(char **extensions, uint32_t *num_extensions, const char *name)
+{
+	uint32_t i;
+
+	for (i = 0; i < *num_extensions; ++i)
+	{
+		if (Q_strcmp(extensions[i], name) == 0)  // don't add duplicate
+			return;
+	}
+
+	if (*num_extensions >= MAX_ENABLED_EXTENSIONS)
+		Sys_Error("AddExtension failed (array is full)");
+	
+	extensions[*num_extensions] = malloc(Q_strlen(name) + 1);
+	Q_strcpy(extensions[*num_extensions], name);
+	(*num_extensions)++;
+}
+
+/*
+===============
+AddVrExtensions
+
+adds the extension names from the space separated list of vulkan extensions required by openvr
+===============
+*/
+static void AddVrExtensions(char **extensions, uint32_t *num_extensions, const char *vr_extensions)
+{
+	char token[VK_MAX_EXTENSION_NAME_SIZE] = { 0 };
+	const char *src = vr_extensions;
+	char *dest = token;
+
+	while (*src)
+	{
+		*dest = *src;
+
+		if (*(src + 1) == '\0' || *(src + 1) == ' ')
+		{
+			*(dest + 1) = '\0';
+			AddExtension(extensions, num_extensions, token);
+			dest = token;
+
+			if (*(src + 1) == ' ')
+				src++;
+		}
+		else
+		{
+			dest++;
+		}
+		src++;
+	}
+}
+
+/*
+===============
 GL_InitInstance
 ===============
 */
 static void GL_InitInstance( void )
 {
 	VkResult err;
-	uint32_t i;
+	uint32_t i, j;
 
-	int found_surface_extensions = 0;
-
-	uint32_t instance_extension_count;
-	err = vkEnumerateInstanceExtensionProperties(NULL, &instance_extension_count, NULL);
-	if (err == VK_SUCCESS || instance_extension_count > 0)
+	uint32_t num_extensions = 0;
+	char *extensions[MAX_ENABLED_EXTENSIONS];
+	char *vr_extensions = NULL;
+	
+	uint32_t len = VR_GetVulkanInstanceExtensionsRequired(NULL, 0);
+	if (len)
 	{
-		VkExtensionProperties *instance_extensions = (VkExtensionProperties *)
-						malloc(sizeof(VkExtensionProperties) * instance_extension_count);
-		err = vkEnumerateInstanceExtensionProperties(NULL, &instance_extension_count, instance_extensions);
-
-		for (i = 0; i < instance_extension_count; ++i)
-		{
-			if (strcmp(VK_KHR_SURFACE_EXTENSION_NAME, instance_extensions[i].extensionName) == 0)
-			{
-				found_surface_extensions++;
-			}
+		vr_extensions = malloc(len);
+		VR_GetVulkanInstanceExtensionsRequired(vr_extensions, len);
+		AddVrExtensions(extensions, &num_extensions, vr_extensions);
+		free(vr_extensions);
+	}
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 #define PLATFORM_SURF_EXT VK_KHR_WIN32_SURFACE_EXTENSION_NAME
 #elif VK_USE_PLATFORM_XCB_KHR
 #define PLATFORM_SURF_EXT VK_KHR_XCB_SURFACE_EXTENSION_NAME
 #endif
+	AddExtension(extensions, &num_extensions, PLATFORM_SURF_EXT);
+	AddExtension(extensions, &num_extensions, VK_KHR_SURFACE_EXTENSION_NAME);
+	
+	qboolean found;
+	uint32_t num_available_extensions = 0;
+	err = vkEnumerateInstanceExtensionProperties(NULL, &num_available_extensions, NULL);
 
-			if (strcmp(PLATFORM_SURF_EXT, instance_extensions[i].extensionName) == 0)
+	if (err == VK_SUCCESS || num_available_extensions > 0)
+	{
+		VkExtensionProperties *available_extensions = (VkExtensionProperties *)
+			malloc(sizeof(VkExtensionProperties) * num_available_extensions);
+		err = vkEnumerateInstanceExtensionProperties(NULL, &num_available_extensions, available_extensions);
+
+		for (i = 0; i < num_extensions; ++i)
+		{
+			found = false;
+			for (j = 0; j < num_available_extensions; ++j)
 			{
-				found_surface_extensions++;
+				if (Q_strcmp(extensions[i], available_extensions[j].extensionName) == 0)
+				{
+					found = true;
+					break;
+				}
 			}
+			if (!found)
+				Sys_Error("Couldn't find %s instance extension", extensions[i]);
 		}
 
-		free(instance_extensions);
+		free(available_extensions);
 	}
 
-	if(found_surface_extensions != 2)
-		Sys_Error("Couldn't find %s/%s extensions", VK_KHR_SURFACE_EXTENSION_NAME, PLATFORM_SURF_EXT);
-	
 	VkApplicationInfo application_info;
 	memset(&application_info, 0, sizeof(application_info));
 	application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	application_info.pApplicationName = "vkQuake";
+	application_info.pApplicationName = "vkQuakeVR";
 	application_info.applicationVersion = 1;
-	application_info.pEngineName = "vkQuake";
+	application_info.pEngineName = "vkQuakeVR";
 	application_info.engineVersion = 1;
 	application_info.apiVersion = VK_API_VERSION_1_0;
-
-	const char * const instance_extensions[] = { VK_KHR_SURFACE_EXTENSION_NAME, PLATFORM_SURF_EXT, VK_EXT_DEBUG_REPORT_EXTENSION_NAME };
 
 	VkInstanceCreateInfo instance_create_info;
 	memset(&instance_create_info, 0, sizeof(instance_create_info));
 	instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	instance_create_info.pApplicationInfo = &application_info;
-	instance_create_info.enabledExtensionCount = 2;
-	instance_create_info.ppEnabledExtensionNames = instance_extensions;
 #ifdef _DEBUG
 	const char * const layer_names[] = { "VK_LAYER_LUNARG_standard_validation" };
 
 	if(vulkan_globals.validation)
 	{
-		instance_create_info.enabledExtensionCount = 3;
 		instance_create_info.enabledLayerCount = 1;
 		instance_create_info.ppEnabledLayerNames = layer_names;
+		AddExtension(extensions, &num_extensions, VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
 	}
 #endif
+	instance_create_info.enabledExtensionCount = num_extensions;
+	instance_create_info.ppEnabledExtensionNames = extensions;
 
 	err = vkCreateInstance(&instance_create_info, NULL, &vulkan_instance);
 	if (err != VK_SUCCESS)
 		Sys_Error("Couldn't create Vulkan instance");
+
+	for (i = 0; i < num_extensions; ++i)
+		free(extensions[i]);
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 	VkWin32SurfaceCreateInfoKHR surface_create_info;
@@ -652,7 +729,7 @@ GL_InitDevice
 static void GL_InitDevice( void )
 {
 	VkResult err;
-	uint32_t i;
+	uint32_t i, j;
 
 	uint32_t physical_device_count;
 	err = vkEnumeratePhysicalDevices(vulkan_instance, &physical_device_count, NULL);
@@ -664,36 +741,7 @@ static void GL_InitDevice( void )
 	vulkan_physical_device = physical_devices[0];
 	free(physical_devices);
 
-	qboolean found_swapchain_extension = false;
-	qboolean found_debug_marker_extension = false;
-
 	vkGetPhysicalDeviceMemoryProperties(vulkan_physical_device, &vulkan_globals.memory_properties);
-
-	uint32_t device_extension_count;
-	err = vkEnumerateDeviceExtensionProperties(vulkan_physical_device, NULL, &device_extension_count, NULL);
-
-	if (err == VK_SUCCESS || device_extension_count > 0)
-	{
-		VkExtensionProperties *device_extensions = (VkExtensionProperties *) malloc(sizeof(VkExtensionProperties) * device_extension_count);
-		err = vkEnumerateDeviceExtensionProperties(vulkan_physical_device, NULL, &device_extension_count, device_extensions);
-
-		for (i = 0; i < device_extension_count; ++i)
-		{
-			if (strcmp(VK_KHR_SWAPCHAIN_EXTENSION_NAME, device_extensions[i].extensionName) == 0)
-			{
-				found_swapchain_extension = true;
-			}
-			if (strcmp(VK_EXT_DEBUG_MARKER_EXTENSION_NAME, device_extensions[i].extensionName) == 0)
-			{
-				found_debug_marker_extension = true;
-			}
-		}
-
-		free(device_extensions);
-	}
-
-	if(!found_swapchain_extension)
-		Sys_Error("Couldn't find %s extension", VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
 	vkGetPhysicalDeviceProperties(vulkan_physical_device, &vulkan_globals.device_properties);
 	switch(vulkan_globals.device_properties.vendorID)
@@ -712,6 +760,58 @@ static void GL_InitDevice( void )
 	}
 
 	Con_Printf("Device: %s\n", vulkan_globals.device_properties.deviceName);
+
+	uint32_t num_extensions = 0;
+	char *extensions[MAX_ENABLED_EXTENSIONS];
+	char *vr_extensions = NULL;
+
+	uint32_t len = VR_GetVulkanDeviceExtensionsRequired(vulkan_physical_device, NULL, 0);
+	if (len)
+	{
+		vr_extensions = malloc(len);
+		VR_GetVulkanDeviceExtensionsRequired(vulkan_physical_device, vr_extensions, len);
+		AddVrExtensions(extensions, &num_extensions, vr_extensions);
+		free(vr_extensions);
+	}
+
+	AddExtension(extensions, &num_extensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+	qboolean found, found_debug_marker_extension;
+	uint32_t num_available_extensions = 0;
+	err = vkEnumerateDeviceExtensionProperties(vulkan_physical_device, NULL, &num_available_extensions, NULL);
+
+	if (err == VK_SUCCESS || num_available_extensions > 0)
+	{
+		VkExtensionProperties *available_extensions = (VkExtensionProperties *)malloc(sizeof(VkExtensionProperties) * num_available_extensions);
+		err = vkEnumerateDeviceExtensionProperties(vulkan_physical_device, NULL, &num_available_extensions, available_extensions);
+
+		found_debug_marker_extension = false;
+		for (j = 0; j < num_available_extensions; ++j)
+		{
+			if (Q_strcmp(VK_EXT_DEBUG_MARKER_EXTENSION_NAME, available_extensions[j].extensionName) == 0)
+			{
+				found_debug_marker_extension = true;
+				break;
+			}
+		}
+
+		for (i = 0; i < num_extensions; ++i)
+		{
+			found = false;
+			for (j = 0; j < num_available_extensions; ++j)
+			{
+				if (Q_strcmp(extensions[i], available_extensions[j].extensionName) == 0)
+				{
+					found = true;
+					break;
+				}
+			}
+			if (!found)
+				Sys_Error("Couldn't find %s device extension", extensions[i]);
+		}
+
+		free(available_extensions);
+	}
 
 	qboolean found_graphics_queue = false;
 
@@ -754,23 +854,24 @@ static void GL_InitDevice( void )
 	queue_create_info.queueCount = 1;
 	queue_create_info.pQueuePriorities = queue_priorities;
 
-	const char * const device_extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DEBUG_MARKER_EXTENSION_NAME };
-
 	VkDeviceCreateInfo device_create_info;
 	memset(&device_create_info, 0, sizeof(device_create_info));
 	device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	device_create_info.queueCreateInfoCount = 1;
 	device_create_info.pQueueCreateInfos = &queue_create_info;
-	device_create_info.enabledExtensionCount = 1;
-	device_create_info.ppEnabledExtensionNames = device_extensions;
 #if _DEBUG
 	if (found_debug_marker_extension)
-		device_create_info.enabledExtensionCount = 2;
+		AddExtension(extensions, &num_extensions, VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
 #endif
+	device_create_info.enabledExtensionCount = num_extensions;
+	device_create_info.ppEnabledExtensionNames = extensions;
 
 	err = vkCreateDevice(vulkan_physical_device, &device_create_info, NULL, &vulkan_globals.device);
 	if (err != VK_SUCCESS)
 		Sys_Error("Couldn't create Vulkan device");
+
+	for (i = 0; i < num_extensions; ++i)
+		free(extensions[i]);
 
 	vkGetPhysicalDeviceFeatures(vulkan_physical_device, &vulkan_physical_device_features);
 

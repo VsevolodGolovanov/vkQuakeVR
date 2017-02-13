@@ -85,6 +85,16 @@ void VR_Init (void)
 	Con_Printf("Render target size: %u x %u\n", vr.width, vr.height);
 }
 
+uint32_t VR_GetVulkanInstanceExtensionsRequired(char *extension_names, uint32_t buffer_size)
+{
+	return vr_compositor->GetVulkanInstanceExtensionsRequired(extension_names, buffer_size);
+}
+
+uint32_t VR_GetVulkanDeviceExtensionsRequired(struct VkPhysicalDevice_T *physical_device, char *extension_names, uint32_t buffer_size)
+{
+	return vr_compositor->GetVulkanDeviceExtensionsRequired(physical_device, extension_names, buffer_size);
+}
+
 /*
 =================
 VR_Shutdown
