@@ -28,15 +28,64 @@ vrdef_t	vr;				// global vr state
 
 //====================================
 
-static VrSystem		vr_hmd;
-static VrCompositor	vr_compositor;
+static VrSystem					vr_hmd;
+static VrCompositor				vr_compositor;
+static VRVulkanTextureData_t	vr_texture_data[2];
+static Texture_t				vr_texture[2];
+
+/*
+===================
+VR_Submit
+===================
+*/
+void VR_Submit(VkImage left_color_buffer, VkImage right_color_buffer)
+{
+	vr_texture_data[0].m_nImage = (uint64_t)left_color_buffer;
+	vr_compositor->Submit(EVREye_Eye_Left, &vr_texture[0], NULL, EVRSubmitFlags_Submit_Default);
+
+	vr_texture_data[1].m_nImage = (uint64_t)right_color_buffer;
+	vr_compositor->Submit(EVREye_Eye_Right, &vr_texture[1], NULL, EVRSubmitFlags_Submit_Default);
+
+	vr_compositor->WaitGetPoses(NULL, 0, NULL, 0);
+}
+
+/*
+===================
+VR_SetTextureData
+===================
+*/
+void VR_SetTextureData(VRVulkanTextureData_t texture_data)
+{
+	vr_texture_data[0] = texture_data;
+	vr_texture_data[1] = texture_data;
+}
+
+/*
+===================
+VR_GetVulkanInstanceExtensionsRequired
+===================
+*/
+uint32_t VR_GetVulkanInstanceExtensionsRequired(char *extension_names, uint32_t buffer_size)
+{
+	return vr_compositor->GetVulkanInstanceExtensionsRequired(extension_names, buffer_size);
+}
+
+/*
+===================
+VR_GetVulkanDeviceExtensionsRequired
+===================
+*/
+uint32_t VR_GetVulkanDeviceExtensionsRequired(struct VkPhysicalDevice_T *physical_device, char *extension_names, uint32_t buffer_size)
+{
+	return vr_compositor->GetVulkanDeviceExtensionsRequired(physical_device, extension_names, buffer_size);
+}
 
 /*
 ===================
 VR_Init
 ===================
 */
-void VR_Init (void)
+void VR_Init(void)
 {
 	EVRInitError i_err;
 	char fntable_name[128];
@@ -83,16 +132,13 @@ void VR_Init (void)
 
 	vr_hmd->GetRecommendedRenderTargetSize(&vr.width, &vr.height);
 	Con_Printf("Render target size: %u x %u\n", vr.width, vr.height);
-}
 
-uint32_t VR_GetVulkanInstanceExtensionsRequired(char *extension_names, uint32_t buffer_size)
-{
-	return vr_compositor->GetVulkanInstanceExtensionsRequired(extension_names, buffer_size);
-}
-
-uint32_t VR_GetVulkanDeviceExtensionsRequired(struct VkPhysicalDevice_T *physical_device, char *extension_names, uint32_t buffer_size)
-{
-	return vr_compositor->GetVulkanDeviceExtensionsRequired(physical_device, extension_names, buffer_size);
+	vr_texture[0].eColorSpace = EColorSpace_ColorSpace_Auto;
+	vr_texture[0].eType = ETextureType_TextureType_Vulkan;
+	vr_texture[0].handle = &vr_texture_data[0];
+	vr_texture[1].eColorSpace = EColorSpace_ColorSpace_Auto;
+	vr_texture[1].eType = ETextureType_TextureType_Vulkan;
+	vr_texture[1].handle = &vr_texture_data[1];
 }
 
 /*

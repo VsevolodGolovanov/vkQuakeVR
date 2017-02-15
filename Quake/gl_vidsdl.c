@@ -1756,6 +1756,8 @@ void GL_BeginRendering (int *x, int *y, int *width, int *height)
 	if (err != VK_SUCCESS)
 		Sys_Error("vkResetFences failed");
 
+	VR_Submit(vulkan_globals.color_buffers[2], vulkan_globals.color_buffers[2]);
+	
 	VkCommandBufferBeginInfo command_buffer_begin_info;
 	memset(&command_buffer_begin_info, 0, sizeof(command_buffer_begin_info));
 	command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -2164,6 +2166,20 @@ void	VID_Init (void)
 	R_CreatePipelineLayouts();
 	R_CreatePipelines();
 	GL_CreateDescriptorSets();
+
+	VRVulkanTextureData_t vr_texture_data;
+	memset(&vr_texture_data, 0, sizeof(vr_texture_data));
+	vr_texture_data.m_pDevice = vulkan_globals.device;
+	vr_texture_data.m_pPhysicalDevice = vulkan_physical_device;
+	vr_texture_data.m_pInstance = vulkan_instance;
+	vr_texture_data.m_pQueue = vulkan_globals.queue;
+	vr_texture_data.m_nQueueFamilyIndex = vulkan_globals.gfx_queue_family_index;
+	vr_texture_data.m_nWidth = vid.width;
+	vr_texture_data.m_nHeight = vid.height;
+	vr_texture_data.m_nFormat = COLOR_BUFFER_FORMAT;
+	vr_texture_data.m_nSampleCount = VK_SAMPLE_COUNT_1_BIT;
+	
+	VR_SetTextureData(vr_texture_data);
 
 	//johnfitz -- removed code creating "glquake" subdirectory
 
