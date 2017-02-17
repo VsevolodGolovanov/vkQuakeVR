@@ -110,6 +110,7 @@ typedef struct
 	qboolean							validation;
 	VkQueue								queue;
 	VkCommandBuffer						command_buffer;
+	VkCommandBuffer						swapchain_command_buffer;
 	VkClearValue						color_clear_value;
 	VkFormat							swap_chain_format;
 	VkPhysicalDeviceProperties			device_properties;
@@ -129,6 +130,8 @@ typedef struct
 	VkRenderPass						ui_render_pass;
 	VkRenderPassBeginInfo				ui_render_pass_begin_info;
 	VkRenderPass						warp_render_pass;
+	VkRenderPass						swapchain_render_pass;
+	VkRenderPassBeginInfo				swapchain_render_pass_begin_info;
 
 	// Pipelines
 	VkPipeline							basic_alphatest_pipeline[2];
@@ -152,6 +155,7 @@ typedef struct
 	VkPipelineLayout					alias_pipeline_layout;
 	VkPipeline							postprocess_pipeline;
 	VkPipelineLayout					postprocess_pipeline_layout;
+	VkPipeline							swapchain_pipeline;
 	VkPipeline							screen_warp_pipeline;
 	VkPipelineLayout					screen_warp_pipeline_layout;
 

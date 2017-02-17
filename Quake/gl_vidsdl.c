@@ -41,8 +41,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #define MAX_ENABLED_EXTENSIONS 16
 #define NUM_COMMAND_BUFFERS 2
+#define NUM_SWAPCHAIN_COMMAND_BUFFERS 2
 #define MAX_SWAP_CHAIN_IMAGES 8
 #define COLOR_BUFFER_FORMAT VK_FORMAT_R8G8B8A8_UNORM
+#define VR_LEFT_COLOR_BUFFER 2
+#define VR_RIGHT_COLOR_BUFFER 2
 
 typedef struct {
 	int			width;
@@ -104,12 +107,16 @@ static VkSwapchainKHR				vulkan_swapchain;
 
 static uint32_t						num_swap_chain_images;
 static uint32_t						current_command_buffer;
+static uint32_t						current_swapchain_command_buffer;
 static VkCommandPool				command_pool;
 static VkCommandPool				transient_command_pool;
 static VkCommandBuffer				command_buffers[NUM_COMMAND_BUFFERS];
+static VkCommandBuffer				swapchain_command_buffers[NUM_SWAPCHAIN_COMMAND_BUFFERS];
 static VkFence						command_buffer_fences[NUM_COMMAND_BUFFERS];
+static VkFence						swapchain_command_buffer_fences[NUM_SWAPCHAIN_COMMAND_BUFFERS];
 static qboolean						command_buffer_submitted[NUM_COMMAND_BUFFERS];
-static VkFramebuffer				main_framebuffers[NUM_COLOR_BUFFERS];
+static qboolean						swapchain_command_buffer_submitted[NUM_SWAPCHAIN_COMMAND_BUFFERS];
+static VkFramebuffer				main_framebuffers[NUM_COLOR_BUFFERS-1];
 static VkFramebuffer				ui_framebuffer;
 static VkFramebuffer				swapchain_framebuffers[MAX_SWAP_CHAIN_IMAGES];
 static VkImage						swapchain_images[MAX_SWAP_CHAIN_IMAGES];
@@ -124,6 +131,7 @@ static VkImage						msaa_color_buffer;
 static VkDeviceMemory				msaa_color_buffer_memory;
 static VkImageView					msaa_color_buffer_view;
 static VkDescriptorSet				postprocess_descriptor_set;
+static VkDescriptorSet				swapchain_descriptor_set;
 
 static PFN_vkGetDeviceProcAddr fpGetDeviceProcAddr;
 static PFN_vkGetPhysicalDeviceSurfaceSupportKHR fpGetPhysicalDeviceSurfaceSupportKHR;
@@ -935,6 +943,7 @@ static void GL_InitCommandBuffers( void )
 	if (err != VK_SUCCESS)
 		Sys_Error("vkCreateCommandPool failed");
 
+	// Command buffers for main render pass
 	VkCommandBufferAllocateInfo command_buffer_allocate_info;
 	memset(&command_buffer_allocate_info, 0, sizeof(command_buffer_allocate_info));
 	command_buffer_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -952,6 +961,18 @@ static void GL_InitCommandBuffers( void )
 	for (i = 0; i < NUM_COMMAND_BUFFERS; ++i) 
 	{
 		err = vkCreateFence(vulkan_globals.device, &fence_create_info, NULL, &command_buffer_fences[i]);
+		if (err != VK_SUCCESS)
+			Sys_Error("vkCreateFence failed");
+	}
+
+	// Command buffers for swap chain render pass
+	err = vkAllocateCommandBuffers(vulkan_globals.device, &command_buffer_allocate_info, swapchain_command_buffers);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkAllocateCommandBuffers failed");
+
+	for (i = 0; i < NUM_SWAPCHAIN_COMMAND_BUFFERS; ++i)
+	{
+		err = vkCreateFence(vulkan_globals.device, &fence_create_info, NULL, &swapchain_command_buffer_fences[i]);
 		if (err != VK_SUCCESS)
 			Sys_Error("vkCreateFence failed");
 	}
@@ -1123,6 +1144,59 @@ static void GL_CreateRenderPasses()
 
 		GL_SetObjectName((uint64_t)vulkan_globals.warp_render_pass, VK_DEBUG_REPORT_OBJECT_TYPE_RENDER_PASS_EXT, "warp");
 	}
+
+	// Swap chain render pass
+	attachment_descriptions[0].initialLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	attachment_descriptions[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	attachment_descriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
+	attachment_descriptions[0].format = COLOR_BUFFER_FORMAT;
+	attachment_descriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+	attachment_descriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+	attachment_descriptions[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	attachment_descriptions[1].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	attachment_descriptions[1].samples = VK_SAMPLE_COUNT_1_BIT;
+	attachment_descriptions[1].format = vulkan_globals.swap_chain_format;
+	attachment_descriptions[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	attachment_descriptions[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+	color_input_attachment_reference.attachment = 0;
+	color_input_attachment_reference.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+	VkAttachmentReference swapchain_color_attachment_reference;
+	swapchain_color_attachment_reference.attachment = 1;
+	swapchain_color_attachment_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+	memset(&subpass_descriptions, 0, sizeof(subpass_descriptions));
+	subpass_descriptions[0].colorAttachmentCount = 1;
+	subpass_descriptions[0].pColorAttachments = &swapchain_color_attachment_reference;
+	subpass_descriptions[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+	subpass_descriptions[0].inputAttachmentCount = 1;
+	subpass_descriptions[0].pInputAttachments = &color_input_attachment_reference;
+
+	memset(&subpass_dependencies, 0, sizeof(subpass_dependencies));
+	subpass_dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	subpass_dependencies[0].dstSubpass = 0;
+	subpass_dependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+	subpass_dependencies[0].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	subpass_dependencies[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	subpass_dependencies[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	subpass_dependencies[0].dependencyFlags = 0;
+
+	memset(&render_pass_create_info, 0, sizeof(render_pass_create_info));
+	render_pass_create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+	render_pass_create_info.attachmentCount = 2;
+	render_pass_create_info.pAttachments = attachment_descriptions;
+	render_pass_create_info.subpassCount = 1;
+	render_pass_create_info.pSubpasses = subpass_descriptions;
+	render_pass_create_info.dependencyCount = 1;
+	render_pass_create_info.pDependencies = subpass_dependencies;
+
+	err = vkCreateRenderPass(vulkan_globals.device, &render_pass_create_info, NULL, &vulkan_globals.swapchain_render_pass);
+	if (err != VK_SUCCESS)
+		Sys_Error("Couldn't create Vulkan render pass");
+
+	GL_SetObjectName((uint64_t)vulkan_globals.swapchain_render_pass, VK_DEBUG_REPORT_OBJECT_TYPE_RENDER_PASS_EXT, "swapchain");
 }
 
 /*
@@ -1394,7 +1468,23 @@ static void GL_CreateDescriptorSets(void)
 	input_attachment_write.dstSet = postprocess_descriptor_set;
 	input_attachment_write.pImageInfo = &image_info;
 	vkUpdateDescriptorSets(vulkan_globals.device, 1, &input_attachment_write, 0, NULL);
+	
+	vkAllocateDescriptorSets(vulkan_globals.device, &descriptor_set_allocate_info, &swapchain_descriptor_set);
+	
+	memset(&image_info, 0, sizeof(image_info));
+	image_info.imageView = color_buffers_view[VR_RIGHT_COLOR_BUFFER];
+	image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
+	memset(&input_attachment_write, 0, sizeof(input_attachment_write));
+	input_attachment_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	input_attachment_write.dstBinding = 0;
+	input_attachment_write.dstArrayElement = 0;
+	input_attachment_write.descriptorCount = 1;
+	input_attachment_write.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+	input_attachment_write.dstSet = swapchain_descriptor_set;
+	input_attachment_write.pImageInfo = &image_info;
+	vkUpdateDescriptorSets(vulkan_globals.device, 1, &input_attachment_write, 0, NULL);
+	
 	memset(&descriptor_set_allocate_info, 0, sizeof(descriptor_set_allocate_info));
 	descriptor_set_allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	descriptor_set_allocate_info.descriptorPool = vulkan_globals.descriptor_pool;
@@ -1624,7 +1714,7 @@ static void GL_CreateFrameBuffers( void )
 	framebuffer_create_info.height = vid.height;
 	framebuffer_create_info.layers = 1;
 
-	VkImageView attachments[2] = { color_buffers_view[0],  color_buffers_view[2] };
+	VkImageView attachments[2] = { color_buffers_view[0],  color_buffers_view[VR_RIGHT_COLOR_BUFFER] };
 	framebuffer_create_info.pAttachments = attachments;
 
 	err = vkCreateFramebuffer(vulkan_globals.device, &framebuffer_create_info, NULL, &ui_framebuffer);
@@ -1638,13 +1728,13 @@ static void GL_CreateFrameBuffers( void )
 		VkFramebufferCreateInfo framebuffer_create_info;
 		memset(&framebuffer_create_info, 0, sizeof(framebuffer_create_info));
 		framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-		framebuffer_create_info.renderPass = vulkan_globals.ui_render_pass;
+		framebuffer_create_info.renderPass = vulkan_globals.swapchain_render_pass;
 		framebuffer_create_info.attachmentCount = 2;
 		framebuffer_create_info.width = vid.width;
 		framebuffer_create_info.height = vid.height;
 		framebuffer_create_info.layers = 1;
 
-		VkImageView attachments[2] = { color_buffers_view[0],  swapchain_images_views[i] };
+		VkImageView attachments[2] = { color_buffers_view[VR_RIGHT_COLOR_BUFFER], swapchain_images_views[i] };
 		framebuffer_create_info.pAttachments = attachments;
 
 		err = vkCreateFramebuffer(vulkan_globals.device, &framebuffer_create_info, NULL, &swapchain_framebuffers[i]);
@@ -1671,6 +1761,9 @@ static void GL_DestroyBeforeSetMode( void )
 
 	vkFreeDescriptorSets(vulkan_globals.device, vulkan_globals.descriptor_pool, 1, &vulkan_globals.screen_warp_desc_set);
 	vulkan_globals.screen_warp_desc_set = VK_NULL_HANDLE;
+
+	vkFreeDescriptorSets(vulkan_globals.device, vulkan_globals.descriptor_pool, 1, &swapchain_descriptor_set);
+	swapchain_descriptor_set = VK_NULL_HANDLE;
 
 	if (msaa_color_buffer)
 	{
@@ -1716,7 +1809,7 @@ static void GL_DestroyBeforeSetMode( void )
 		swapchain_framebuffers[i] = VK_NULL_HANDLE;
 	}
 
-	for (i = 0; i < NUM_COLOR_BUFFERS; ++i)
+	for (i = 0; i < NUM_COLOR_BUFFERS - 1; ++i)
 	{
 		vkDestroyFramebuffer(vulkan_globals.device, main_framebuffers[i], NULL);
 		main_framebuffers[i] = VK_NULL_HANDLE;
@@ -1725,6 +1818,7 @@ static void GL_DestroyBeforeSetMode( void )
 	fpDestroySwapchainKHR(vulkan_globals.device, vulkan_swapchain, NULL);
 
 	vkDestroyRenderPass(vulkan_globals.device, vulkan_globals.main_render_pass, NULL);
+	vkDestroyRenderPass(vulkan_globals.device, vulkan_globals.swapchain_render_pass, NULL);
 }
 
 /*
@@ -1750,13 +1844,107 @@ void GL_BeginRendering (int *x, int *y, int *width, int *height)
 		err = vkWaitForFences(vulkan_globals.device, 1, &command_buffer_fences[current_command_buffer], VK_TRUE, UINT64_MAX);
 		if (err != VK_SUCCESS)
 			Sys_Error("vkWaitForFences failed");
+
+		VR_Submit(vulkan_globals.color_buffers[VR_LEFT_COLOR_BUFFER], vulkan_globals.color_buffers[VR_RIGHT_COLOR_BUFFER]);
+
+		// Render to swap chain
+		if (swapchain_command_buffer_submitted[current_swapchain_command_buffer])
+		{
+			err = vkWaitForFences(vulkan_globals.device, 1, &swapchain_command_buffer_fences[current_swapchain_command_buffer], VK_TRUE, UINT64_MAX);
+			if (err != VK_SUCCESS)
+				Sys_Error("vkWaitForFences failed");
+		}
+
+		err = vkResetFences(vulkan_globals.device, 1, &swapchain_command_buffer_fences[current_swapchain_command_buffer]);
+		if (err != VK_SUCCESS)
+			Sys_Error("vkResetFences failed");
+
+		VkCommandBufferBeginInfo command_buffer_begin_info;
+		memset(&command_buffer_begin_info, 0, sizeof(command_buffer_begin_info));
+		command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+		vulkan_globals.swapchain_command_buffer = swapchain_command_buffers[current_swapchain_command_buffer];
+		err = vkBeginCommandBuffer(vulkan_globals.swapchain_command_buffer, &command_buffer_begin_info);
+		if (err != VK_SUCCESS)
+			Sys_Error("vkBeginCommandBuffer failed");
+
+		err = fpAcquireNextImageKHR(vulkan_globals.device, vulkan_swapchain, UINT64_MAX, image_aquired_semaphores[current_swapchain_command_buffer], VK_NULL_HANDLE, &current_swapchain_buffer);
+		if (err != VK_SUCCESS)
+			Sys_Error("Couldn't acquire next image");
+
+		VkRect2D render_area;
+		render_area.offset.x = 0;
+		render_area.offset.y = 0;
+		render_area.extent.width = vid.width;
+		render_area.extent.height = vid.height;
+
+		memset(&vulkan_globals.swapchain_render_pass_begin_info, 0, sizeof(vulkan_globals.swapchain_render_pass_begin_info));
+		vulkan_globals.swapchain_render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		vulkan_globals.swapchain_render_pass_begin_info.renderArea = render_area;
+		vulkan_globals.swapchain_render_pass_begin_info.renderPass = vulkan_globals.swapchain_render_pass;
+		vulkan_globals.swapchain_render_pass_begin_info.framebuffer = swapchain_framebuffers[current_swapchain_buffer];
+
+		vkCmdSetScissor(vulkan_globals.swapchain_command_buffer, 0, 1, &render_area);
+
+		VkViewport viewport;
+		viewport.x = 0;
+		viewport.y = 0;
+		viewport.width = vid.width;
+		viewport.height = vid.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		vkCmdSetViewport(vulkan_globals.swapchain_command_buffer, 0, 1, &viewport);
+
+		vkCmdBeginRenderPass(vulkan_globals.swapchain_command_buffer, &vulkan_globals.swapchain_render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+		float postprocess_values[2] = { 1.0f, 1.0f };
+
+		vkCmdBindDescriptorSets(vulkan_globals.swapchain_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_globals.postprocess_pipeline_layout, 0, 1, &swapchain_descriptor_set, 0, NULL);
+		vkCmdBindPipeline(vulkan_globals.swapchain_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_globals.swapchain_pipeline);
+		vkCmdPushConstants(vulkan_globals.swapchain_command_buffer, vulkan_globals.postprocess_pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 2 * sizeof(float), postprocess_values);
+		vkCmdDraw(vulkan_globals.swapchain_command_buffer, 3, 1, 0, 0);
+
+		vkCmdEndRenderPass(vulkan_globals.swapchain_command_buffer);
+
+		err = vkEndCommandBuffer(vulkan_globals.swapchain_command_buffer);
+		if (err != VK_SUCCESS)
+			Sys_Error("vkEndCommandBuffer failed");
+
+		VkPipelineStageFlags wait_dst_stage_mask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+
+		VkSubmitInfo submit_info;
+		memset(&submit_info, 0, sizeof(submit_info));
+		submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submit_info.commandBufferCount = 1;
+		submit_info.pCommandBuffers = &swapchain_command_buffers[current_swapchain_command_buffer];
+		submit_info.waitSemaphoreCount = 1;
+		submit_info.pWaitSemaphores = &image_aquired_semaphores[current_swapchain_command_buffer];
+		submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
+
+		err = vkQueueSubmit(vulkan_globals.queue, 1, &submit_info, swapchain_command_buffer_fences[current_swapchain_command_buffer]);
+		if (err != VK_SUCCESS)
+			Sys_Error("vkQueueSubmit failed");
+
+		vulkan_globals.device_idle = false;
+
+		swapchain_command_buffer_submitted[current_swapchain_command_buffer] = true;
+		current_swapchain_command_buffer = (current_swapchain_command_buffer + 1) % NUM_SWAPCHAIN_COMMAND_BUFFERS;
+
+		VkPresentInfoKHR present_info;
+		memset(&present_info, 0, sizeof(present_info));
+		present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+		present_info.swapchainCount = 1;
+		present_info.pSwapchains = &vulkan_swapchain,
+			present_info.pImageIndices = &current_swapchain_buffer;
+		err = fpQueuePresentKHR(vulkan_globals.queue, &present_info);
+		if (err != VK_SUCCESS)
+			Sys_Error("vkQueuePresentKHR failed");
 	}
 
 	err = vkResetFences(vulkan_globals.device, 1, &command_buffer_fences[current_command_buffer]);
 	if (err != VK_SUCCESS)
 		Sys_Error("vkResetFences failed");
-
-	VR_Submit(vulkan_globals.color_buffers[2], vulkan_globals.color_buffers[2]);
 	
 	VkCommandBufferBeginInfo command_buffer_begin_info;
 	memset(&command_buffer_begin_info, 0, sizeof(command_buffer_begin_info));
@@ -1766,10 +1954,6 @@ void GL_BeginRendering (int *x, int *y, int *width, int *height)
 	err = vkBeginCommandBuffer(vulkan_globals.command_buffer, &command_buffer_begin_info);
 	if (err != VK_SUCCESS)
 		Sys_Error("vkBeginCommandBuffer failed");
-
-	//err = fpAcquireNextImageKHR(vulkan_globals.device, vulkan_swapchain, UINT64_MAX, image_aquired_semaphores[current_command_buffer], VK_NULL_HANDLE, &current_swapchain_buffer);
-	//if (err != VK_SUCCESS)
-	//	Sys_Error("Couldn't acquire next image");
 
 	VkRect2D render_area;
 	render_area.offset.x = 0;
@@ -1844,16 +2028,11 @@ void GL_EndRendering (void)
 	if (err != VK_SUCCESS)
 		Sys_Error("vkEndCommandBuffer failed");
 
-	//VkPipelineStageFlags wait_dst_stage_mask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-
 	VkSubmitInfo submit_info;
 	memset(&submit_info, 0, sizeof(submit_info));
 	submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submit_info.commandBufferCount = 1;
 	submit_info.pCommandBuffers = &command_buffers[current_command_buffer];
-	//submit_info.waitSemaphoreCount = 1;
-	//submit_info.pWaitSemaphores = &image_aquired_semaphores[current_command_buffer];
-	//submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
 
 	err = vkQueueSubmit(vulkan_globals.queue, 1, &submit_info, command_buffer_fences[current_command_buffer]);
 	if (err != VK_SUCCESS)
@@ -1863,16 +2042,6 @@ void GL_EndRendering (void)
 
 	command_buffer_submitted[current_command_buffer] = true;
 	current_command_buffer = (current_command_buffer + 1) % NUM_COMMAND_BUFFERS;
-
-	//VkPresentInfoKHR present_info;
-	//memset(&present_info, 0, sizeof(present_info));
-	//present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	//present_info.swapchainCount = 1;
-	//present_info.pSwapchains = &vulkan_swapchain,
-	//present_info.pImageIndices = &current_swapchain_buffer;
-	//err = fpQueuePresentKHR(vulkan_globals.queue, &present_info);
-	//if (err != VK_SUCCESS)
-	//	Sys_Error("vkQueuePresentKHR failed");
 }
 
 /*

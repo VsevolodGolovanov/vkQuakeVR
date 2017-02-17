@@ -1643,6 +1643,31 @@ void R_CreatePipelines()
 	GL_SetObjectName((uint64_t)vulkan_globals.postprocess_pipeline, VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT, "postprocess");
 
 	//================
+	// Swap chain pipeline
+	//================
+	multisample_state_create_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	rasterization_state_create_info.cullMode = VK_CULL_MODE_NONE;
+	depth_stencil_state_create_info.depthTestEnable = VK_FALSE;
+	blend_attachment_state.blendEnable = VK_FALSE;
+
+	vertex_input_state_create_info.vertexAttributeDescriptionCount = 0;
+	vertex_input_state_create_info.pVertexAttributeDescriptions = NULL;
+	vertex_input_state_create_info.vertexBindingDescriptionCount = 0;
+	vertex_input_state_create_info.pVertexBindingDescriptions = NULL;
+
+	shader_stages[0].module = postprocess_vert_module;
+	shader_stages[1].module = postprocess_frag_module;
+	pipeline_create_info.renderPass = vulkan_globals.swapchain_render_pass;
+	pipeline_create_info.layout = vulkan_globals.postprocess_pipeline_layout;
+	pipeline_create_info.subpass = 0;
+
+	err = vkCreateGraphicsPipelines(vulkan_globals.device, VK_NULL_HANDLE, 1, &pipeline_create_info, NULL, &vulkan_globals.swapchain_pipeline);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkCreateGraphicsPipelines failed");
+
+	GL_SetObjectName((uint64_t)vulkan_globals.swapchain_pipeline, VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT, "swapchain");
+
+	//================
 	// Screen Warp
 	//================
 	VkPipelineShaderStageCreateInfo compute_shader_stage;
@@ -1708,6 +1733,7 @@ void R_DestroyPipelines(void)
 	vkDestroyPipeline(vulkan_globals.device, vulkan_globals.alias_pipeline, NULL);
 	vkDestroyPipeline(vulkan_globals.device, vulkan_globals.alias_blend_pipeline, NULL);
 	vkDestroyPipeline(vulkan_globals.device, vulkan_globals.postprocess_pipeline, NULL);
+	vkDestroyPipeline(vulkan_globals.device, vulkan_globals.swapchain_pipeline, NULL);
 }
 
 /*
