@@ -302,6 +302,8 @@ copy "$(SolutionDir)\..\openvr\x64\*.dll" "$(TargetDir)"</Command>
     <ClCompile Include="..\..\Shaders\Compiled\screen_warp_comp.c" />
     <ClCompile Include="..\..\Shaders\Compiled\sky_layer_frag.c" />
     <ClCompile Include="..\..\Shaders\Compiled\sky_layer_vert.c" />
+    <ClCompile Include="..\..\Shaders\Compiled\swapchain_frag.c" />
+    <ClCompile Include="..\..\Shaders\Compiled\swapchain_vert.c" />
     <ClCompile Include="..\..\Shaders\Compiled\world_frag.c" />
     <ClCompile Include="..\..\Shaders\Compiled\world_vert.c" />
   </ItemGroup>

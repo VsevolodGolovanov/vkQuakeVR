@@ -4,6 +4,7 @@ Copyright (C) 2002-2009 John Fitzgibbons and others
 Copyright (C) 2007-2008 Kristian Duske
 Copyright (C) 2010-2014 QuakeSpasm developers
 Copyright (C) 2016 Axel Gneiting
+Copyright (C) 2017 Felix Rueegg
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -1007,6 +1008,25 @@ void R_CreatePipelineLayouts()
 	if (err != VK_SUCCESS)
 		Sys_Error("vkCreatePipelineLayout failed");
 
+	// Swap chain
+	VkDescriptorSetLayout swapchain_descriptor_set_layouts[1] = {
+		vulkan_globals.single_texture_set_layout,
+	};
+
+	memset(&push_constant_range, 0, sizeof(push_constant_range));
+	push_constant_range.offset = 0;
+	push_constant_range.size = 6 * sizeof(float);
+	push_constant_range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	pipeline_layout_create_info.setLayoutCount = 1;
+	pipeline_layout_create_info.pSetLayouts = swapchain_descriptor_set_layouts;
+	pipeline_layout_create_info.pushConstantRangeCount = 1;
+	pipeline_layout_create_info.pPushConstantRanges = &push_constant_range;
+
+	err = vkCreatePipelineLayout(vulkan_globals.device, &pipeline_layout_create_info, NULL, &vulkan_globals.swapchain_pipeline_layout);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkCreatePipelineLayout failed");
+
 	// Screen warp
 	VkDescriptorSetLayout screen_warp_descriptor_set_layouts[1] = {
 		vulkan_globals.screen_warp_set_layout,
@@ -1139,6 +1159,8 @@ void R_CreatePipelines()
 	VkShaderModule sky_layer_frag_module = R_CreateShaderModule(sky_layer_frag_spv, sky_layer_frag_spv_size);
 	VkShaderModule postprocess_vert_module = R_CreateShaderModule(postprocess_vert_spv, postprocess_vert_spv_size);
 	VkShaderModule postprocess_frag_module = R_CreateShaderModule(postprocess_frag_spv, postprocess_frag_spv_size);
+	VkShaderModule swapchain_vert_module = R_CreateShaderModule(swapchain_vert_spv, swapchain_vert_spv_size);
+	VkShaderModule swapchain_frag_module = R_CreateShaderModule(swapchain_frag_spv, swapchain_frag_spv_size);
 	VkShaderModule screen_warp_comp_module = R_CreateShaderModule(screen_warp_comp_spv, screen_warp_comp_spv_size);
 
 	VkPipelineDynamicStateCreateInfo dynamic_state_create_info;
@@ -1655,10 +1677,10 @@ void R_CreatePipelines()
 	vertex_input_state_create_info.vertexBindingDescriptionCount = 0;
 	vertex_input_state_create_info.pVertexBindingDescriptions = NULL;
 
-	shader_stages[0].module = postprocess_vert_module;
-	shader_stages[1].module = postprocess_frag_module;
+	shader_stages[0].module = swapchain_vert_module;
+	shader_stages[1].module = swapchain_frag_module;
 	pipeline_create_info.renderPass = vulkan_globals.swapchain_render_pass;
-	pipeline_create_info.layout = vulkan_globals.postprocess_pipeline_layout;
+	pipeline_create_info.layout = vulkan_globals.swapchain_pipeline_layout;
 	pipeline_create_info.subpass = 0;
 
 	err = vkCreateGraphicsPipelines(vulkan_globals.device, VK_NULL_HANDLE, 1, &pipeline_create_info, NULL, &vulkan_globals.swapchain_pipeline);
@@ -1693,6 +1715,8 @@ void R_CreatePipelines()
 	vkDestroyShaderModule(vulkan_globals.device, screen_warp_comp_module, NULL);
 	vkDestroyShaderModule(vulkan_globals.device, postprocess_frag_module, NULL);
 	vkDestroyShaderModule(vulkan_globals.device, postprocess_vert_module, NULL);
+	vkDestroyShaderModule(vulkan_globals.device, swapchain_frag_module, NULL);
+	vkDestroyShaderModule(vulkan_globals.device, swapchain_vert_module, NULL);
 	vkDestroyShaderModule(vulkan_globals.device, sky_layer_frag_module, NULL);
 	vkDestroyShaderModule(vulkan_globals.device, sky_layer_vert_module, NULL);
 	vkDestroyShaderModule(vulkan_globals.device, alias_frag_module, NULL);

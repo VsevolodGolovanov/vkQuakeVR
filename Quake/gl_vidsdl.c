@@ -1146,51 +1146,30 @@ static void GL_CreateRenderPasses()
 	}
 
 	// Swap chain render pass
-	attachment_descriptions[0].initialLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-	attachment_descriptions[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	attachment_descriptions[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	attachment_descriptions[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 	attachment_descriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
-	attachment_descriptions[0].format = COLOR_BUFFER_FORMAT;
-	attachment_descriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-	attachment_descriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-
-	attachment_descriptions[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	attachment_descriptions[1].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-	attachment_descriptions[1].samples = VK_SAMPLE_COUNT_1_BIT;
-	attachment_descriptions[1].format = vulkan_globals.swap_chain_format;
-	attachment_descriptions[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	attachment_descriptions[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
-	color_input_attachment_reference.attachment = 0;
-	color_input_attachment_reference.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	attachment_descriptions[0].format = vulkan_globals.swap_chain_format;
+	attachment_descriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	attachment_descriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
 	VkAttachmentReference swapchain_color_attachment_reference;
-	swapchain_color_attachment_reference.attachment = 1;
+	swapchain_color_attachment_reference.attachment = 0;
 	swapchain_color_attachment_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 	memset(&subpass_descriptions, 0, sizeof(subpass_descriptions));
 	subpass_descriptions[0].colorAttachmentCount = 1;
 	subpass_descriptions[0].pColorAttachments = &swapchain_color_attachment_reference;
 	subpass_descriptions[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-	subpass_descriptions[0].inputAttachmentCount = 1;
-	subpass_descriptions[0].pInputAttachments = &color_input_attachment_reference;
-
-	memset(&subpass_dependencies, 0, sizeof(subpass_dependencies));
-	subpass_dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-	subpass_dependencies[0].dstSubpass = 0;
-	subpass_dependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-	subpass_dependencies[0].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-	subpass_dependencies[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-	subpass_dependencies[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-	subpass_dependencies[0].dependencyFlags = 0;
 
 	memset(&render_pass_create_info, 0, sizeof(render_pass_create_info));
 	render_pass_create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	render_pass_create_info.attachmentCount = 2;
+	render_pass_create_info.attachmentCount = 1;
 	render_pass_create_info.pAttachments = attachment_descriptions;
 	render_pass_create_info.subpassCount = 1;
 	render_pass_create_info.pSubpasses = subpass_descriptions;
-	render_pass_create_info.dependencyCount = 1;
-	render_pass_create_info.pDependencies = subpass_dependencies;
+	render_pass_create_info.dependencyCount = 0;
+	render_pass_create_info.pDependencies = NULL;
 
 	err = vkCreateRenderPass(vulkan_globals.device, &render_pass_create_info, NULL, &vulkan_globals.swapchain_render_pass);
 	if (err != VK_SUCCESS)
@@ -1469,18 +1448,25 @@ static void GL_CreateDescriptorSets(void)
 	input_attachment_write.pImageInfo = &image_info;
 	vkUpdateDescriptorSets(vulkan_globals.device, 1, &input_attachment_write, 0, NULL);
 	
+	memset(&descriptor_set_allocate_info, 0, sizeof(descriptor_set_allocate_info));
+	descriptor_set_allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	descriptor_set_allocate_info.descriptorPool = vulkan_globals.descriptor_pool;
+	descriptor_set_allocate_info.descriptorSetCount = 1;
+	descriptor_set_allocate_info.pSetLayouts = &vulkan_globals.single_texture_set_layout;
+
 	vkAllocateDescriptorSets(vulkan_globals.device, &descriptor_set_allocate_info, &swapchain_descriptor_set);
 	
 	memset(&image_info, 0, sizeof(image_info));
 	image_info.imageView = color_buffers_view[VR_RIGHT_COLOR_BUFFER];
 	image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	image_info.sampler = vulkan_globals.linear_sampler;
 
 	memset(&input_attachment_write, 0, sizeof(input_attachment_write));
 	input_attachment_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	input_attachment_write.dstBinding = 0;
 	input_attachment_write.dstArrayElement = 0;
 	input_attachment_write.descriptorCount = 1;
-	input_attachment_write.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+	input_attachment_write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	input_attachment_write.dstSet = swapchain_descriptor_set;
 	input_attachment_write.pImageInfo = &image_info;
 	vkUpdateDescriptorSets(vulkan_globals.device, 1, &input_attachment_write, 0, NULL);
@@ -1729,12 +1715,12 @@ static void GL_CreateFrameBuffers( void )
 		memset(&framebuffer_create_info, 0, sizeof(framebuffer_create_info));
 		framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		framebuffer_create_info.renderPass = vulkan_globals.swapchain_render_pass;
-		framebuffer_create_info.attachmentCount = 2;
+		framebuffer_create_info.attachmentCount = 1;
 		framebuffer_create_info.width = vid.width;
 		framebuffer_create_info.height = vid.height;
 		framebuffer_create_info.layers = 1;
 
-		VkImageView attachments[2] = { color_buffers_view[VR_RIGHT_COLOR_BUFFER], swapchain_images_views[i] };
+		VkImageView attachments[1] = { swapchain_images_views[i] };
 		framebuffer_create_info.pAttachments = attachments;
 
 		err = vkCreateFramebuffer(vulkan_globals.device, &framebuffer_create_info, NULL, &swapchain_framebuffers[i]);
@@ -1898,11 +1884,11 @@ void GL_BeginRendering (int *x, int *y, int *width, int *height)
 
 		vkCmdBeginRenderPass(vulkan_globals.swapchain_command_buffer, &vulkan_globals.swapchain_render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
-		float postprocess_values[2] = { 1.0f, 1.0f };
+		float texcoord_values[6] = { 0.0f, 0.0f, 1.0f * 2.0f, 0.0f, 0.0f, 1.0f * 2.0f };
 
-		vkCmdBindDescriptorSets(vulkan_globals.swapchain_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_globals.postprocess_pipeline_layout, 0, 1, &swapchain_descriptor_set, 0, NULL);
+		vkCmdBindDescriptorSets(vulkan_globals.swapchain_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_globals.swapchain_pipeline_layout, 0, 1, &swapchain_descriptor_set, 0, NULL);
 		vkCmdBindPipeline(vulkan_globals.swapchain_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_globals.swapchain_pipeline);
-		vkCmdPushConstants(vulkan_globals.swapchain_command_buffer, vulkan_globals.postprocess_pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 2 * sizeof(float), postprocess_values);
+		vkCmdPushConstants(vulkan_globals.swapchain_command_buffer, vulkan_globals.swapchain_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, 6 * sizeof(float), texcoord_values);
 		vkCmdDraw(vulkan_globals.swapchain_command_buffer, 3, 1, 0, 0);
 
 		vkCmdEndRenderPass(vulkan_globals.swapchain_command_buffer);
