@@ -2019,10 +2019,16 @@ void R_TimeRefresh_f (void)
 	start = Sys_DoubleTime ();
 	for (i = 0; i < 128; i++)
 	{
-		GL_BeginRendering(&glx, &gly, &glwidth, &glheight);
-		r_refdef.viewangles[1] = i/128.0*360.0;
-		R_RenderView ();
-		GL_EndRendering ();
+		for (vr.current_eye = 0; vr.current_eye < NUM_VR_EYES; ++vr.current_eye)
+		{
+			GL_BeginRendering(&glx, &gly, &glwidth, &glheight);
+			
+			if (vr.current_eye == VR_EYE_LEFT)
+				r_refdef.viewangles[1] = i / 128.0*360.0;
+			
+			R_RenderView();
+			GL_EndRendering();
+		}
 	}
 
 	//glFinish ();

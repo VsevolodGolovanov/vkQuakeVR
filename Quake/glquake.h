@@ -48,7 +48,7 @@ extern	int glx, gly, glwidth, glheight;
 #define BACKFACE_EPSILON	0.01
 
 #define	MAX_GLTEXTURES	2048
-#define NUM_COLOR_BUFFERS 3
+#define NUM_COLOR_BUFFERS 4
 
 void R_TimeRefresh_f (void);
 void R_ReadPointFile_f (void);

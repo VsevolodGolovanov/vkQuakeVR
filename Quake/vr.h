@@ -23,8 +23,21 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // vr.h -- virtual reality headset support
 
+#define VR_EYE_LEFT		0
+#define VR_EYE_RIGHT	1
+#define NUM_VR_EYES		2
+
 typedef struct
 {
+	EVREye					vreye;
+	Texture_t				texture;
+	VRVulkanTextureData_t	texture_data;
+} vreye_t;
+
+typedef struct
+{
+	vreye_t			eye[NUM_VR_EYES];
+	uint32_t		current_eye;
 	uint32_t		width;
 	uint32_t		height;
 } vrdef_t;
@@ -34,8 +47,7 @@ extern	vrdef_t vr;				// global vr state
 void		VR_Init (void);
 void		VR_Shutdown (void);
 
-void		VR_Submit(VkImage left_color_buffer, VkImage right_color_buffer);
-void		VR_SetTextureData(VRVulkanTextureData_t texture_data);
+void		VR_Submit(uint32_t eye, VkImage color_buffer);
 uint32_t	VR_GetVulkanInstanceExtensionsRequired(char *extension_names, uint32_t buffer_size);
 uint32_t	VR_GetVulkanDeviceExtensionsRequired(struct VkPhysicalDevice_T *physical_device, char *extension_names, uint32_t buffer_size);
 

@@ -28,36 +28,22 @@ vrdef_t	vr;				// global vr state
 
 //====================================
 
-static VrSystem					vr_hmd;
-static VrCompositor				vr_compositor;
-static VRVulkanTextureData_t	vr_texture_data[2];
-static Texture_t				vr_texture[2];
+static VrSystem		vr_hmd;
+static VrCompositor	vr_compositor;
 
 /*
 ===================
 VR_Submit
 ===================
 */
-void VR_Submit(VkImage left_color_buffer, VkImage right_color_buffer)
+void VR_Submit(uint32_t eye, VkImage color_buffer)
 {
-	vr_texture_data[0].m_nImage = (uint64_t)left_color_buffer;
-	vr_compositor->Submit(EVREye_Eye_Left, &vr_texture[0], NULL, EVRSubmitFlags_Submit_Default);
+	vr.eye[eye].texture_data.m_nImage = (uint64_t)color_buffer;
+	
+	vr_compositor->Submit(vr.eye[eye].vreye, &vr.eye[eye].texture, NULL, EVRSubmitFlags_Submit_Default);
 
-	vr_texture_data[1].m_nImage = (uint64_t)right_color_buffer;
-	vr_compositor->Submit(EVREye_Eye_Right, &vr_texture[1], NULL, EVRSubmitFlags_Submit_Default);
-
-	vr_compositor->WaitGetPoses(NULL, 0, NULL, 0);
-}
-
-/*
-===================
-VR_SetTextureData
-===================
-*/
-void VR_SetTextureData(VRVulkanTextureData_t texture_data)
-{
-	vr_texture_data[0] = texture_data;
-	vr_texture_data[1] = texture_data;
+	if (eye == VR_EYE_RIGHT)
+		vr_compositor->WaitGetPoses(NULL, 0, NULL, 0);
 }
 
 /*
@@ -87,8 +73,9 @@ VR_Init
 */
 void VR_Init(void)
 {
-	EVRInitError i_err;
-	char fntable_name[128];
+	EVRInitError	i_err;
+	char			fntable_name[128];
+	uint32_t		i;
 
 	Con_Printf("\nVR Initialization\n");
 
@@ -133,12 +120,17 @@ void VR_Init(void)
 	vr_hmd->GetRecommendedRenderTargetSize(&vr.width, &vr.height);
 	Con_Printf("Render target size: %u x %u\n", vr.width, vr.height);
 
-	vr_texture[0].eColorSpace = EColorSpace_ColorSpace_Auto;
-	vr_texture[0].eType = ETextureType_TextureType_Vulkan;
-	vr_texture[0].handle = &vr_texture_data[0];
-	vr_texture[1].eColorSpace = EColorSpace_ColorSpace_Auto;
-	vr_texture[1].eType = ETextureType_TextureType_Vulkan;
-	vr_texture[1].handle = &vr_texture_data[1];
+	for (i = 0; i < NUM_VR_EYES; ++i)
+	{
+		vr.eye[i].texture.handle = &vr.eye[i].texture_data;
+		vr.eye[i].texture.eColorSpace = EColorSpace_ColorSpace_Auto;
+		vr.eye[i].texture.eType = ETextureType_TextureType_Vulkan;
+
+		if (i == VR_EYE_LEFT)
+			vr.eye[i].vreye = EVREye_Eye_Left;
+		else
+			vr.eye[i].vreye = EVREye_Eye_Right;
+	}
 }
 
 /*

@@ -960,67 +960,70 @@ void SCR_UpdateScreen (void)
 			return;
 	}
 
-	GL_BeginRendering (&glx, &gly, &glwidth, &glheight);
-
-	//
-	// determine size of refresh window
-	//
-	if (vid.recalc_refdef)
-		SCR_CalcRefdef ();
-
-//
-// do 3D refresh drawing, and then update the screen
-//
-	SCR_SetUpToDrawConsole ();
-
-	V_RenderView ();
-
-	GL_Set2D ();
-
-	//FIXME: only call this when needed
-	SCR_TileClear ();
-
-	if (scr_drawdialog) //new game confirm
+	for (vr.current_eye = 0; vr.current_eye < NUM_VR_EYES; ++vr.current_eye)
 	{
-		if (con_forcedup)
-			Draw_ConsoleBackground ();
+		GL_BeginRendering(&glx, &gly, &glwidth, &glheight);
+
+		//
+		// determine size of refresh window
+		//
+		if (vid.recalc_refdef)
+			SCR_CalcRefdef();
+
+		//
+		// do 3D refresh drawing, and then update the screen
+		//
+		SCR_SetUpToDrawConsole();
+
+		V_RenderView();
+
+		GL_Set2D();
+
+		//FIXME: only call this when needed
+		SCR_TileClear();
+
+		if (scr_drawdialog) //new game confirm
+		{
+			if (con_forcedup)
+				Draw_ConsoleBackground();
+			else
+				Sbar_Draw();
+			Draw_FadeScreen();
+			SCR_DrawNotifyString();
+		}
+		else if (scr_drawloading) //loading
+		{
+			SCR_DrawLoading();
+			Sbar_Draw();
+		}
+		else if (cl.intermission == 1 && key_dest == key_game) //end of level
+		{
+			Sbar_IntermissionOverlay();
+		}
+		else if (cl.intermission == 2 && key_dest == key_game) //end of episode
+		{
+			Sbar_FinaleOverlay();
+			SCR_CheckDrawCenterString();
+		}
 		else
-			Sbar_Draw ();
-		Draw_FadeScreen ();
-		SCR_DrawNotifyString ();
-	}
-	else if (scr_drawloading) //loading
-	{
-		SCR_DrawLoading ();
-		Sbar_Draw ();
-	}
-	else if (cl.intermission == 1 && key_dest == key_game) //end of level
-	{
-		Sbar_IntermissionOverlay ();
-	}
-	else if (cl.intermission == 2 && key_dest == key_game) //end of episode
-	{
-		Sbar_FinaleOverlay ();
-		SCR_CheckDrawCenterString ();
-	}
-	else
-	{
-		SCR_DrawCrosshair (); //johnfitz
-		SCR_DrawRam ();
-		SCR_DrawNet ();
-		SCR_DrawTurtle ();
-		SCR_DrawPause ();
-		SCR_CheckDrawCenterString ();
-		Sbar_Draw ();
-		SCR_DrawDevStats (); //johnfitz
-		SCR_DrawFPS (); //johnfitz
-		SCR_DrawClock (); //johnfitz
-		SCR_DrawConsole ();
-		M_Draw ();
-	}
+		{
+			SCR_DrawCrosshair(); //johnfitz
+			SCR_DrawRam();
+			SCR_DrawNet();
+			SCR_DrawTurtle();
+			SCR_DrawPause();
+			SCR_CheckDrawCenterString();
+			Sbar_Draw();
+			SCR_DrawDevStats(); //johnfitz
+			SCR_DrawFPS(); //johnfitz
+			SCR_DrawClock(); //johnfitz
+			SCR_DrawConsole();
+			M_Draw();
+		}
 
-	V_UpdateBlend (); //johnfitz -- V_UpdatePalette cleaned up and renamed
+		V_UpdateBlend(); //johnfitz -- V_UpdatePalette cleaned up and renamed
 
-	GL_EndRendering ();
+		GL_EndRendering();
+	}
 }
 

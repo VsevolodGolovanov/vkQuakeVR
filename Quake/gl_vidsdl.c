@@ -44,8 +44,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define NUM_SWAPCHAIN_COMMAND_BUFFERS 2
 #define MAX_SWAP_CHAIN_IMAGES 8
 #define COLOR_BUFFER_FORMAT VK_FORMAT_R8G8B8A8_UNORM
-#define VR_LEFT_COLOR_BUFFER 2
-#define VR_RIGHT_COLOR_BUFFER 2
+#define VR_EYE_BUFFER_LEFT 2
+#define VR_EYE_BUFFER_RIGHT 3
 
 typedef struct {
 	int			width;
@@ -116,8 +116,8 @@ static VkFence						command_buffer_fences[NUM_COMMAND_BUFFERS];
 static VkFence						swapchain_command_buffer_fences[NUM_SWAPCHAIN_COMMAND_BUFFERS];
 static qboolean						command_buffer_submitted[NUM_COMMAND_BUFFERS];
 static qboolean						swapchain_command_buffer_submitted[NUM_SWAPCHAIN_COMMAND_BUFFERS];
-static VkFramebuffer				main_framebuffers[NUM_COLOR_BUFFERS-1];
-static VkFramebuffer				ui_framebuffer;
+static VkFramebuffer				main_framebuffers[NUM_COLOR_BUFFERS - NUM_VR_EYES];
+static VkFramebuffer				ui_framebuffers[NUM_VR_EYES];
 static VkFramebuffer				swapchain_framebuffers[MAX_SWAP_CHAIN_IMAGES];
 static VkImage						swapchain_images[MAX_SWAP_CHAIN_IMAGES];
 static VkImageView					swapchain_images_views[MAX_SWAP_CHAIN_IMAGES];
@@ -1457,7 +1457,7 @@ static void GL_CreateDescriptorSets(void)
 	vkAllocateDescriptorSets(vulkan_globals.device, &descriptor_set_allocate_info, &swapchain_descriptor_set);
 	
 	memset(&image_info, 0, sizeof(image_info));
-	image_info.imageView = color_buffers_view[VR_RIGHT_COLOR_BUFFER];
+	image_info.imageView = color_buffers_view[VR_EYE_BUFFER_RIGHT];
 	image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	image_info.sampler = vulkan_globals.linear_sampler;
 
@@ -1670,7 +1670,7 @@ static void GL_CreateFrameBuffers( void )
 
 	const qboolean resolve = ( vulkan_globals.sample_count != VK_SAMPLE_COUNT_1_BIT);
 
-	for (i = 0; i < NUM_COLOR_BUFFERS - 1; ++i)
+	for (i = 0; i < NUM_COLOR_BUFFERS - NUM_VR_EYES; ++i)
 	{
 		VkFramebufferCreateInfo framebuffer_create_info;
 		memset(&framebuffer_create_info, 0, sizeof(framebuffer_create_info));
@@ -1691,23 +1691,26 @@ static void GL_CreateFrameBuffers( void )
 		GL_SetObjectName((uint64_t)main_framebuffers[i], VK_DEBUG_REPORT_OBJECT_TYPE_FRAMEBUFFER_EXT, "main");
 	}
 
-	VkFramebufferCreateInfo framebuffer_create_info;
-	memset(&framebuffer_create_info, 0, sizeof(framebuffer_create_info));
-	framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-	framebuffer_create_info.renderPass = vulkan_globals.ui_render_pass;
-	framebuffer_create_info.attachmentCount = 2;
-	framebuffer_create_info.width = vid.width;
-	framebuffer_create_info.height = vid.height;
-	framebuffer_create_info.layers = 1;
+	for (i = 0; i < NUM_VR_EYES; ++i)
+	{
+		VkFramebufferCreateInfo framebuffer_create_info;
+		memset(&framebuffer_create_info, 0, sizeof(framebuffer_create_info));
+		framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		framebuffer_create_info.renderPass = vulkan_globals.ui_render_pass;
+		framebuffer_create_info.attachmentCount = 2;
+		framebuffer_create_info.width = vid.width;
+		framebuffer_create_info.height = vid.height;
+		framebuffer_create_info.layers = 1;
 
-	VkImageView attachments[2] = { color_buffers_view[0],  color_buffers_view[VR_RIGHT_COLOR_BUFFER] };
-	framebuffer_create_info.pAttachments = attachments;
+		VkImageView attachments[2] = { color_buffers_view[0],  color_buffers_view[i == VR_EYE_LEFT ? VR_EYE_BUFFER_LEFT : VR_EYE_BUFFER_RIGHT] };
+		framebuffer_create_info.pAttachments = attachments;
 
-	err = vkCreateFramebuffer(vulkan_globals.device, &framebuffer_create_info, NULL, &ui_framebuffer);
-	if (err != VK_SUCCESS)
-		Sys_Error("vkCreateFramebuffer failed");
+		err = vkCreateFramebuffer(vulkan_globals.device, &framebuffer_create_info, NULL, &ui_framebuffers[i]);
+		if (err != VK_SUCCESS)
+			Sys_Error("vkCreateFramebuffer failed");
 
-	GL_SetObjectName((uint64_t)ui_framebuffer, VK_DEBUG_REPORT_OBJECT_TYPE_FRAMEBUFFER_EXT, "ui");
+		GL_SetObjectName((uint64_t)ui_framebuffers[i], VK_DEBUG_REPORT_OBJECT_TYPE_FRAMEBUFFER_EXT, "ui");
+	}
 	
 	for (i = 0; i < num_swap_chain_images; ++i)
 	{
@@ -1784,8 +1787,11 @@ static void GL_DestroyBeforeSetMode( void )
 	depth_buffer = VK_NULL_HANDLE;
 	depth_buffer_memory = VK_NULL_HANDLE;
 
-	vkDestroyFramebuffer(vulkan_globals.device, ui_framebuffer, NULL);
-	ui_framebuffer = VK_NULL_HANDLE;
+	for (i = 0; i < NUM_VR_EYES; ++i)
+	{
+		vkDestroyFramebuffer(vulkan_globals.device, ui_framebuffers[i], NULL);
+		ui_framebuffers[i] = VK_NULL_HANDLE;
+	}
 
 	for (i = 0; i < num_swap_chain_images; ++i)
 	{
@@ -1795,7 +1801,7 @@ static void GL_DestroyBeforeSetMode( void )
 		swapchain_framebuffers[i] = VK_NULL_HANDLE;
 	}
 
-	for (i = 0; i < NUM_COLOR_BUFFERS - 1; ++i)
+	for (i = 0; i < NUM_COLOR_BUFFERS - NUM_VR_EYES; ++i)
 	{
 		vkDestroyFramebuffer(vulkan_globals.device, main_framebuffers[i], NULL);
 		main_framebuffers[i] = VK_NULL_HANDLE;
@@ -1819,6 +1825,7 @@ void GL_BeginRendering (int *x, int *y, int *width, int *height)
 	R_SwapDynamicBuffers();
 
 	vulkan_globals.device_idle = false;
+	current_command_buffer = vr.current_eye;
 	*x = *y = 0;
 	*width = vid.width;
 	*height = vid.height;
@@ -1831,101 +1838,104 @@ void GL_BeginRendering (int *x, int *y, int *width, int *height)
 		if (err != VK_SUCCESS)
 			Sys_Error("vkWaitForFences failed");
 
-		VR_Submit(vulkan_globals.color_buffers[VR_LEFT_COLOR_BUFFER], vulkan_globals.color_buffers[VR_RIGHT_COLOR_BUFFER]);
+		VR_Submit(vr.current_eye, vulkan_globals.color_buffers[vr.current_eye == VR_EYE_LEFT ? VR_EYE_BUFFER_LEFT : VR_EYE_BUFFER_RIGHT]);
 
-		// Render to swap chain
-		if (swapchain_command_buffer_submitted[current_swapchain_command_buffer])
+		if (vr.current_eye == VR_EYE_RIGHT)
 		{
-			err = vkWaitForFences(vulkan_globals.device, 1, &swapchain_command_buffer_fences[current_swapchain_command_buffer], VK_TRUE, UINT64_MAX);
+			// Render right eye color buffer to swap chain
+			if (swapchain_command_buffer_submitted[current_swapchain_command_buffer])
+			{
+				err = vkWaitForFences(vulkan_globals.device, 1, &swapchain_command_buffer_fences[current_swapchain_command_buffer], VK_TRUE, UINT64_MAX);
+				if (err != VK_SUCCESS)
+					Sys_Error("vkWaitForFences failed");
+			}
+
+			err = vkResetFences(vulkan_globals.device, 1, &swapchain_command_buffer_fences[current_swapchain_command_buffer]);
 			if (err != VK_SUCCESS)
-				Sys_Error("vkWaitForFences failed");
+				Sys_Error("vkResetFences failed");
+
+			VkCommandBufferBeginInfo command_buffer_begin_info;
+			memset(&command_buffer_begin_info, 0, sizeof(command_buffer_begin_info));
+			command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+			vulkan_globals.swapchain_command_buffer = swapchain_command_buffers[current_swapchain_command_buffer];
+			err = vkBeginCommandBuffer(vulkan_globals.swapchain_command_buffer, &command_buffer_begin_info);
+			if (err != VK_SUCCESS)
+				Sys_Error("vkBeginCommandBuffer failed");
+
+			err = fpAcquireNextImageKHR(vulkan_globals.device, vulkan_swapchain, UINT64_MAX, image_aquired_semaphores[current_swapchain_command_buffer], VK_NULL_HANDLE, &current_swapchain_buffer);
+			if (err != VK_SUCCESS)
+				Sys_Error("Couldn't acquire next image");
+
+			VkRect2D render_area;
+			render_area.offset.x = 0;
+			render_area.offset.y = 0;
+			render_area.extent.width = vid.width;
+			render_area.extent.height = vid.height;
+
+			memset(&vulkan_globals.swapchain_render_pass_begin_info, 0, sizeof(vulkan_globals.swapchain_render_pass_begin_info));
+			vulkan_globals.swapchain_render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			vulkan_globals.swapchain_render_pass_begin_info.renderArea = render_area;
+			vulkan_globals.swapchain_render_pass_begin_info.renderPass = vulkan_globals.swapchain_render_pass;
+			vulkan_globals.swapchain_render_pass_begin_info.framebuffer = swapchain_framebuffers[current_swapchain_buffer];
+
+			vkCmdSetScissor(vulkan_globals.swapchain_command_buffer, 0, 1, &render_area);
+
+			VkViewport viewport;
+			viewport.x = 0;
+			viewport.y = 0;
+			viewport.width = vid.width;
+			viewport.height = vid.height;
+			viewport.minDepth = 0.0f;
+			viewport.maxDepth = 1.0f;
+
+			vkCmdSetViewport(vulkan_globals.swapchain_command_buffer, 0, 1, &viewport);
+
+			vkCmdBeginRenderPass(vulkan_globals.swapchain_command_buffer, &vulkan_globals.swapchain_render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+			float texcoord_values[6] = { 0.0f, 0.0f, 1.0f * 2.0f, 0.0f, 0.0f, 1.0f * 2.0f };
+
+			vkCmdBindDescriptorSets(vulkan_globals.swapchain_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_globals.swapchain_pipeline_layout, 0, 1, &swapchain_descriptor_set, 0, NULL);
+			vkCmdBindPipeline(vulkan_globals.swapchain_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_globals.swapchain_pipeline);
+			vkCmdPushConstants(vulkan_globals.swapchain_command_buffer, vulkan_globals.swapchain_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, 6 * sizeof(float), texcoord_values);
+			vkCmdDraw(vulkan_globals.swapchain_command_buffer, 3, 1, 0, 0);
+
+			vkCmdEndRenderPass(vulkan_globals.swapchain_command_buffer);
+
+			err = vkEndCommandBuffer(vulkan_globals.swapchain_command_buffer);
+			if (err != VK_SUCCESS)
+				Sys_Error("vkEndCommandBuffer failed");
+
+			VkPipelineStageFlags wait_dst_stage_mask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+
+			VkSubmitInfo submit_info;
+			memset(&submit_info, 0, sizeof(submit_info));
+			submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+			submit_info.commandBufferCount = 1;
+			submit_info.pCommandBuffers = &swapchain_command_buffers[current_swapchain_command_buffer];
+			submit_info.waitSemaphoreCount = 1;
+			submit_info.pWaitSemaphores = &image_aquired_semaphores[current_swapchain_command_buffer];
+			submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
+
+			err = vkQueueSubmit(vulkan_globals.queue, 1, &submit_info, swapchain_command_buffer_fences[current_swapchain_command_buffer]);
+			if (err != VK_SUCCESS)
+				Sys_Error("vkQueueSubmit failed");
+
+			vulkan_globals.device_idle = false;
+
+			swapchain_command_buffer_submitted[current_swapchain_command_buffer] = true;
+			current_swapchain_command_buffer = (current_swapchain_command_buffer + 1) % NUM_SWAPCHAIN_COMMAND_BUFFERS;
+
+			VkPresentInfoKHR present_info;
+			memset(&present_info, 0, sizeof(present_info));
+			present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+			present_info.swapchainCount = 1;
+			present_info.pSwapchains = &vulkan_swapchain,
+				present_info.pImageIndices = &current_swapchain_buffer;
+			err = fpQueuePresentKHR(vulkan_globals.queue, &present_info);
+			if (err != VK_SUCCESS)
+				Sys_Error("vkQueuePresentKHR failed");
 		}
-
-		err = vkResetFences(vulkan_globals.device, 1, &swapchain_command_buffer_fences[current_swapchain_command_buffer]);
-		if (err != VK_SUCCESS)
-			Sys_Error("vkResetFences failed");
-
-		VkCommandBufferBeginInfo command_buffer_begin_info;
-		memset(&command_buffer_begin_info, 0, sizeof(command_buffer_begin_info));
-		command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-		vulkan_globals.swapchain_command_buffer = swapchain_command_buffers[current_swapchain_command_buffer];
-		err = vkBeginCommandBuffer(vulkan_globals.swapchain_command_buffer, &command_buffer_begin_info);
-		if (err != VK_SUCCESS)
-			Sys_Error("vkBeginCommandBuffer failed");
-
-		err = fpAcquireNextImageKHR(vulkan_globals.device, vulkan_swapchain, UINT64_MAX, image_aquired_semaphores[current_swapchain_command_buffer], VK_NULL_HANDLE, &current_swapchain_buffer);
-		if (err != VK_SUCCESS)
-			Sys_Error("Couldn't acquire next image");
-
-		VkRect2D render_area;
-		render_area.offset.x = 0;
-		render_area.offset.y = 0;
-		render_area.extent.width = vid.width;
-		render_area.extent.height = vid.height;
-
-		memset(&vulkan_globals.swapchain_render_pass_begin_info, 0, sizeof(vulkan_globals.swapchain_render_pass_begin_info));
-		vulkan_globals.swapchain_render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		vulkan_globals.swapchain_render_pass_begin_info.renderArea = render_area;
-		vulkan_globals.swapchain_render_pass_begin_info.renderPass = vulkan_globals.swapchain_render_pass;
-		vulkan_globals.swapchain_render_pass_begin_info.framebuffer = swapchain_framebuffers[current_swapchain_buffer];
-
-		vkCmdSetScissor(vulkan_globals.swapchain_command_buffer, 0, 1, &render_area);
-
-		VkViewport viewport;
-		viewport.x = 0;
-		viewport.y = 0;
-		viewport.width = vid.width;
-		viewport.height = vid.height;
-		viewport.minDepth = 0.0f;
-		viewport.maxDepth = 1.0f;
-
-		vkCmdSetViewport(vulkan_globals.swapchain_command_buffer, 0, 1, &viewport);
-
-		vkCmdBeginRenderPass(vulkan_globals.swapchain_command_buffer, &vulkan_globals.swapchain_render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
-
-		float texcoord_values[6] = { 0.0f, 0.0f, 1.0f * 2.0f, 0.0f, 0.0f, 1.0f * 2.0f };
-
-		vkCmdBindDescriptorSets(vulkan_globals.swapchain_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_globals.swapchain_pipeline_layout, 0, 1, &swapchain_descriptor_set, 0, NULL);
-		vkCmdBindPipeline(vulkan_globals.swapchain_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_globals.swapchain_pipeline);
-		vkCmdPushConstants(vulkan_globals.swapchain_command_buffer, vulkan_globals.swapchain_pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, 6 * sizeof(float), texcoord_values);
-		vkCmdDraw(vulkan_globals.swapchain_command_buffer, 3, 1, 0, 0);
-
-		vkCmdEndRenderPass(vulkan_globals.swapchain_command_buffer);
-
-		err = vkEndCommandBuffer(vulkan_globals.swapchain_command_buffer);
-		if (err != VK_SUCCESS)
-			Sys_Error("vkEndCommandBuffer failed");
-
-		VkPipelineStageFlags wait_dst_stage_mask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-
-		VkSubmitInfo submit_info;
-		memset(&submit_info, 0, sizeof(submit_info));
-		submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submit_info.commandBufferCount = 1;
-		submit_info.pCommandBuffers = &swapchain_command_buffers[current_swapchain_command_buffer];
-		submit_info.waitSemaphoreCount = 1;
-		submit_info.pWaitSemaphores = &image_aquired_semaphores[current_swapchain_command_buffer];
-		submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
-
-		err = vkQueueSubmit(vulkan_globals.queue, 1, &submit_info, swapchain_command_buffer_fences[current_swapchain_command_buffer]);
-		if (err != VK_SUCCESS)
-			Sys_Error("vkQueueSubmit failed");
-
-		vulkan_globals.device_idle = false;
-
-		swapchain_command_buffer_submitted[current_swapchain_command_buffer] = true;
-		current_swapchain_command_buffer = (current_swapchain_command_buffer + 1) % NUM_SWAPCHAIN_COMMAND_BUFFERS;
-
-		VkPresentInfoKHR present_info;
-		memset(&present_info, 0, sizeof(present_info));
-		present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-		present_info.swapchainCount = 1;
-		present_info.pSwapchains = &vulkan_swapchain,
-			present_info.pImageIndices = &current_swapchain_buffer;
-		err = fpQueuePresentKHR(vulkan_globals.queue, &present_info);
-		if (err != VK_SUCCESS)
-			Sys_Error("vkQueuePresentKHR failed");
 	}
 
 	err = vkResetFences(vulkan_globals.device, 1, &command_buffer_fences[current_command_buffer]);
@@ -1970,7 +1980,7 @@ void GL_BeginRendering (int *x, int *y, int *width, int *height)
 	vulkan_globals.ui_render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 	vulkan_globals.ui_render_pass_begin_info.renderArea = render_area;
 	vulkan_globals.ui_render_pass_begin_info.renderPass = vulkan_globals.ui_render_pass;
-	vulkan_globals.ui_render_pass_begin_info.framebuffer = ui_framebuffer;
+	vulkan_globals.ui_render_pass_begin_info.framebuffer = ui_framebuffers[vr.current_eye];
 	vulkan_globals.ui_render_pass_begin_info.clearValueCount = 0;
 
 	vkCmdSetScissor(vulkan_globals.command_buffer, 0, 1, &render_area);
@@ -2027,7 +2037,6 @@ void GL_EndRendering (void)
 	vulkan_globals.device_idle = false;
 
 	command_buffer_submitted[current_command_buffer] = true;
-	current_command_buffer = (current_command_buffer + 1) % NUM_COMMAND_BUFFERS;
 }
 
 /*
@@ -2171,7 +2180,7 @@ VID_Init
 void	VID_Init (void)
 {
 	static char vid_center[] = "SDL_VIDEO_CENTERED=center";
-	int		p, width, height, bpp, display_width, display_height, display_bpp;
+	int		i, p, width, height, bpp, display_width, display_height, display_bpp;
 	qboolean	fullscreen;
 	const char	*read_vars[] = { "vid_fullscreen",
 					 "vid_width",
@@ -2322,19 +2331,18 @@ void	VID_Init (void)
 	R_CreatePipelines();
 	GL_CreateDescriptorSets();
 
-	VRVulkanTextureData_t vr_texture_data;
-	memset(&vr_texture_data, 0, sizeof(vr_texture_data));
-	vr_texture_data.m_pDevice = vulkan_globals.device;
-	vr_texture_data.m_pPhysicalDevice = vulkan_physical_device;
-	vr_texture_data.m_pInstance = vulkan_instance;
-	vr_texture_data.m_pQueue = vulkan_globals.queue;
-	vr_texture_data.m_nQueueFamilyIndex = vulkan_globals.gfx_queue_family_index;
-	vr_texture_data.m_nWidth = vid.width;
-	vr_texture_data.m_nHeight = vid.height;
-	vr_texture_data.m_nFormat = COLOR_BUFFER_FORMAT;
-	vr_texture_data.m_nSampleCount = VK_SAMPLE_COUNT_1_BIT;
-	
-	VR_SetTextureData(vr_texture_data);
+	for (i = 0; i < NUM_VR_EYES; ++i)
+	{
+		vr.eye[i].texture_data.m_pDevice = vulkan_globals.device;
+		vr.eye[i].texture_data.m_pPhysicalDevice = vulkan_physical_device;
+		vr.eye[i].texture_data.m_pInstance = vulkan_instance;
+		vr.eye[i].texture_data.m_pQueue = vulkan_globals.queue;
+		vr.eye[i].texture_data.m_nQueueFamilyIndex = vulkan_globals.gfx_queue_family_index;
+		vr.eye[i].texture_data.m_nWidth = vid.width;
+		vr.eye[i].texture_data.m_nHeight = vid.height;
+		vr.eye[i].texture_data.m_nFormat = COLOR_BUFFER_FORMAT;
+		vr.eye[i].texture_data.m_nSampleCount = VK_SAMPLE_COUNT_1_BIT;
+	}
 
 	//johnfitz -- removed code creating "glquake" subdirectory
 
