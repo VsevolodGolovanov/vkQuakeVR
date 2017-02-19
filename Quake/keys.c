@@ -333,8 +333,8 @@ void Key_Console (int key)
 	case K_PGUP:
 	case K_MWHEELUP:
 		con_backscroll += keydown[K_CTRL] ? ((con_vislines>>3) - 4) : 2;
-		if (con_backscroll > con_totallines - (vid.height>>3) - 1)
-			con_backscroll = con_totallines - (vid.height>>3) - 1;
+		if (con_backscroll > con_totallines - ((int)vr.height>>3) - 1)
+			con_backscroll = con_totallines - (vr.height>>3) - 1;
 		return;
 
 	case K_PGDN:

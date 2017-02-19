@@ -1019,7 +1019,7 @@ void M_AdjustSliders (int dir)
 	switch (options_cursor)
 	{
 	case OPT_SCALE:	// console and menu scale
-		l = ((vid.width + 31) / 32) / 10.0;
+		l = ((vr.width + 31) / 32) / 10.0;
 		f = scr_conscale.value + dir * .1;
 		if (f < 1)	f = 1;
 		else if(f > l)	f = l;
@@ -1158,7 +1158,7 @@ void M_Options_Draw (void)
 
 	// OPT_SCALE:
 	M_Print (16, 32 + 8*OPT_SCALE,		"                 Scale");
-	l = (vid.width / 320.0) - 1;
+	l = (vr.width / 320.0) - 1;
 	r = l > 0 ? (scr_conscale.value - 1) / l : 0;
 	M_DrawSlider (220, 32 + 8*OPT_SCALE, r);
 

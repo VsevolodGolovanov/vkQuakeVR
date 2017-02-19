@@ -529,14 +529,14 @@ void V_PolyBlend (void)
 	vertices[0].position[0] = 0.0f;
 	vertices[0].position[1] = 0.0f;
 
-	vertices[1].position[0] = vid.width;
+	vertices[1].position[0] = vr.width;
 	vertices[1].position[1] = 0.0f;
 
-	vertices[2].position[0] = vid.width;
-	vertices[2].position[1] = vid.height;
+	vertices[2].position[0] = vr.width;
+	vertices[2].position[1] = vr.height;
 
 	vertices[3].position[0] = 0.0f;
-	vertices[3].position[1] = vid.height;
+	vertices[3].position[1] = vr.height;
 
 	for (i = 0; i < 4; ++i)
 	{

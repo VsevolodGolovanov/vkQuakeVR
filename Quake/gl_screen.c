@@ -323,7 +323,7 @@ static void SCR_CalcRefdef (void)
 	r_refdef.vrect.y = (glheight - sb_lines - r_refdef.vrect.height)/2;
 	//johnfitz
 
-	r_refdef.fov_x = AdaptFovx(scr_fov.value, vid.width, vid.height);
+	r_refdef.fov_x = AdaptFovx(scr_fov.value, vr.width, vr.height);
 	r_refdef.fov_y = CalcFovy (r_refdef.fov_x, r_refdef.vrect.width, r_refdef.vrect.height);
 
 	scr_vrect = r_refdef.vrect;
@@ -368,10 +368,10 @@ SCR_Conwidth_f -- johnfitz -- called when scr_conwidth or scr_conscale changes
 void SCR_Conwidth_f (cvar_t *var)
 {
 	vid.recalc_refdef = 1;
-	vid.conwidth = (scr_conwidth.value > 0) ? (int)scr_conwidth.value : (scr_conscale.value > 0) ? (int)(vid.width/scr_conscale.value) : vid.width;
-	vid.conwidth = CLAMP (320, vid.conwidth, vid.width);
+	vid.conwidth = (scr_conwidth.value > 0) ? (int)scr_conwidth.value : (scr_conscale.value > 0) ? (int)(vr.width/scr_conscale.value) : vr.width;
+	vid.conwidth = CLAMP (320, vid.conwidth, (int)vr.width);
 	vid.conwidth &= 0xFFFFFFF8;
-	vid.conheight = vid.conwidth * vid.height / vid.width;
+	vid.conheight = vid.conwidth * vr.height / vr.width;
 }
 
 //============================================================================

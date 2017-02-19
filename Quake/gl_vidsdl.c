@@ -418,8 +418,8 @@ static qboolean VID_SetMode (int width, int height, int bpp, qboolean fullscreen
 
 	vid.width = VID_GetCurrentWidth();
 	vid.height = VID_GetCurrentHeight();
-	vid.conwidth = vid.width & 0xFFFFFFF8;
-	vid.conheight = vid.conwidth * vid.height / vid.width;
+	vid.conwidth = vr.width & 0xFFFFFFF8;
+	vid.conheight = vid.conwidth * vr.height / vr.width;
 	vid.numpages = 2;
 
 	modestate = VID_GetFullscreen() ? MS_FULLSCREEN : MS_WINDOWED;
@@ -1195,8 +1195,8 @@ static void GL_CreateDepthBuffer( void )
 	image_create_info.pNext = NULL;
 	image_create_info.imageType = VK_IMAGE_TYPE_2D;
 	image_create_info.format = vulkan_globals.depth_format;
-	image_create_info.extent.width = vid.width;
-	image_create_info.extent.height = vid.height;
+	image_create_info.extent.width = vr.width;
+	image_create_info.extent.height = vr.height;
 	image_create_info.extent.depth = 1;
 	image_create_info.mipLevels = 1;
 	image_create_info.arrayLayers = 1;
@@ -1269,8 +1269,8 @@ static void GL_CreateColorBuffer( void )
 	image_create_info.pNext = NULL;
 	image_create_info.imageType = VK_IMAGE_TYPE_2D;
 	image_create_info.format = COLOR_BUFFER_FORMAT;
-	image_create_info.extent.width = vid.width;
-	image_create_info.extent.height = vid.height;
+	image_create_info.extent.width = vr.width;
+	image_create_info.extent.height = vr.height;
 	image_create_info.extent.depth = 1;
 	image_create_info.mipLevels = 1;
 	image_create_info.arrayLayers = 1;
@@ -1677,8 +1677,8 @@ static void GL_CreateFrameBuffers( void )
 		framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		framebuffer_create_info.renderPass = vulkan_globals.main_render_pass;
 		framebuffer_create_info.attachmentCount = resolve ? 3 : 2;
-		framebuffer_create_info.width = vid.width;
-		framebuffer_create_info.height = vid.height;
+		framebuffer_create_info.width = vr.width;
+		framebuffer_create_info.height = vr.height;
 		framebuffer_create_info.layers = 1;
 
 		VkImageView attachments[3] = { color_buffers_view[i], depth_buffer_view, msaa_color_buffer_view };
@@ -1698,8 +1698,8 @@ static void GL_CreateFrameBuffers( void )
 		framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		framebuffer_create_info.renderPass = vulkan_globals.ui_render_pass;
 		framebuffer_create_info.attachmentCount = 2;
-		framebuffer_create_info.width = vid.width;
-		framebuffer_create_info.height = vid.height;
+		framebuffer_create_info.width = vr.width;
+		framebuffer_create_info.height = vr.height;
 		framebuffer_create_info.layers = 1;
 
 		VkImageView attachments[2] = { color_buffers_view[0],  color_buffers_view[i == VR_EYE_LEFT ? VR_EYE_BUFFER_LEFT : VR_EYE_BUFFER_RIGHT] };
@@ -1827,8 +1827,8 @@ void GL_BeginRendering (int *x, int *y, int *width, int *height)
 	vulkan_globals.device_idle = false;
 	current_command_buffer = vr.current_eye;
 	*x = *y = 0;
-	*width = vid.width;
-	*height = vid.height;
+	*width = vr.width;
+	*height = vr.height;
 
 	VkResult err;
 
@@ -1954,8 +1954,8 @@ void GL_BeginRendering (int *x, int *y, int *width, int *height)
 	VkRect2D render_area;
 	render_area.offset.x = 0;
 	render_area.offset.y = 0;
-	render_area.extent.width = vid.width;
-	render_area.extent.height = vid.height;
+	render_area.extent.width = vr.width;
+	render_area.extent.height = vr.height;
 
 	VkClearValue depth_clear_value;
 	depth_clear_value.depthStencil.depth = 1.0f;
@@ -1988,8 +1988,8 @@ void GL_BeginRendering (int *x, int *y, int *width, int *height)
 	VkViewport viewport;
 	viewport.x = 0;
 	viewport.y = 0;
-	viewport.width = vid.width;
-	viewport.height = vid.height;
+	viewport.width = vr.width;
+	viewport.height = vr.height;
 	viewport.minDepth = 0.0f;
 	viewport.maxDepth = 1.0f;
 
@@ -2009,7 +2009,7 @@ void GL_EndRendering (void)
 	VkResult err;
 
 	// Render post process
-	GL_Viewport(0, 0, vid.width, vid.height);
+	GL_Viewport(0, 0, vr.width, vr.height);
 	float postprocess_values[2] = { vid_gamma.value, q_min(2.0f, q_max(1.0f, vid_contrast.value)) };
 
 	vkCmdNextSubpass(vulkan_globals.command_buffer, VK_SUBPASS_CONTENTS_INLINE);
@@ -2338,8 +2338,8 @@ void	VID_Init (void)
 		vr.eye[i].texture_data.m_pInstance = vulkan_instance;
 		vr.eye[i].texture_data.m_pQueue = vulkan_globals.queue;
 		vr.eye[i].texture_data.m_nQueueFamilyIndex = vulkan_globals.gfx_queue_family_index;
-		vr.eye[i].texture_data.m_nWidth = vid.width;
-		vr.eye[i].texture_data.m_nHeight = vid.height;
+		vr.eye[i].texture_data.m_nWidth = vr.width;
+		vr.eye[i].texture_data.m_nHeight = vr.height;
 		vr.eye[i].texture_data.m_nFormat = COLOR_BUFFER_FORMAT;
 		vr.eye[i].texture_data.m_nSampleCount = VK_SAMPLE_COUNT_1_BIT;
 	}
@@ -2406,10 +2406,10 @@ static void VID_Restart (void)
 	GL_CreateDescriptorSets();
 
 	//conwidth and conheight need to be recalculated
-	vid.conwidth = (scr_conwidth.value > 0) ? (int)scr_conwidth.value : (scr_conscale.value > 0) ? (int)(vid.width/scr_conscale.value) : vid.width;
-	vid.conwidth = CLAMP (320, vid.conwidth, vid.width);
+	vid.conwidth = (scr_conwidth.value > 0) ? (int)scr_conwidth.value : (scr_conscale.value > 0) ? (int)(vr.width/scr_conscale.value) : vr.width;
+	vid.conwidth = CLAMP (320, vid.conwidth, (int)vr.width);
 	vid.conwidth &= 0xFFFFFFF8;
-	vid.conheight = vid.conwidth * vid.height / vid.width;
+	vid.conheight = vid.conwidth * vr.height / vr.width;
 	//
 	// keep cvars in line with actual mode
 	//

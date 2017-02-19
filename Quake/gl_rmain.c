@@ -502,8 +502,8 @@ void R_DrawViewModel (void)
 	VkViewport viewport;
 	viewport.x = 0;
 	viewport.y = 0;
-	viewport.width = vid.width;
-	viewport.height = vid.height;
+	viewport.width = vr.width;
+	viewport.height = vr.height;
 	viewport.minDepth = 0.0f;
 	viewport.maxDepth = 0.3f;
 	vkCmdSetViewport(vulkan_globals.command_buffer, 0, 1, &viewport);

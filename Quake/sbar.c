@@ -843,7 +843,7 @@ void Sbar_DrawFace (void)
 		if (cl.gametype == GAME_DEATHMATCH)
 			xofs = 113;
 		else
-			xofs = ((vid.width - 320)>>1) + 113;
+			xofs = ((vr.width - 320)>>1) + 113;
 
 		Sbar_DrawPic (112, 0, rsb_teambord);
 		Draw_Fill (xofs, /*vid.height-*/24+3, 22, 9, top, 1); //johnfitz -- sbar coords are now relative
@@ -921,7 +921,7 @@ void Sbar_Draw (void)
 {
 	float w; //johnfitz
 
-	if (scr_con_current == vid.height)
+	if (scr_con_current == vr.height)
 		return;		// console is full screen
 
 	if (cl.intermission)
