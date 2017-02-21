@@ -322,9 +322,9 @@ static void SCR_CalcRefdef (void)
 	r_refdef.vrect.x = (glwidth - r_refdef.vrect.width)/2;
 	r_refdef.vrect.y = (glheight - sb_lines - r_refdef.vrect.height)/2;
 	//johnfitz
-
-	r_refdef.fov_x = AdaptFovx(scr_fov.value, vr.width, vr.height);
-	r_refdef.fov_y = CalcFovy (r_refdef.fov_x, r_refdef.vrect.width, r_refdef.vrect.height);
+	
+	r_refdef.fov_x = vr.fov_x;
+	r_refdef.fov_y = vr.fov_y;
 
 	scr_vrect = r_refdef.vrect;
 }

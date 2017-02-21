@@ -321,7 +321,16 @@ void R_SetupMatrix (void)
 				r_refdef.vrect.height);
 
 	// Projection matrix
-	GL_FrustumMatrix(vulkan_globals.projection_matrix, DEG2RAD(r_fovx), DEG2RAD(r_fovy));
+	memcpy(vulkan_globals.projection_matrix, vr.eye[vr.current_eye].projection, 16 * sizeof(float));
+
+	// Eye matrix
+	MatrixMultiply(vulkan_globals.view_matrix, vr.eye[vr.current_eye].eye_to_head_transform);
+
+	if (vr.current_eye == VR_EYE_LEFT)
+		VR_UpdatePose();
+
+	if (vr.pose[k_unTrackedDeviceIndex_Hmd].bPoseIsValid)
+		VR_GetOrientation(vr.pose[k_unTrackedDeviceIndex_Hmd], &r_refdef.viewangles[PITCH], &r_refdef.viewangles[YAW], &r_refdef.viewangles[ROLL]);
 
 	// View matrix
 	float rotation_matrix[16];

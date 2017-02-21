@@ -283,6 +283,9 @@ void CL_AdjustAngles (void)
 		cl.viewangles[ROLL] = 50;
 	if (cl.viewangles[ROLL] < -50)
 		cl.viewangles[ROLL] = -50;
+
+	if (vr.pose[k_unTrackedDeviceIndex_Hmd].bPoseIsValid)
+		VR_GetOrientation(vr.pose[k_unTrackedDeviceIndex_Hmd], &cl.viewangles[PITCH], &cl.viewangles[YAW], &cl.viewangles[ROLL]);
 }
 
 /*

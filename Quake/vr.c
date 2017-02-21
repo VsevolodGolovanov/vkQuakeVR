@@ -33,6 +33,165 @@ static VrCompositor	vr_compositor;
 
 /*
 ===================
+VR_ConvertFromHmdMatrix34
+===================
+*/
+static void VR_ConvertFromHmdMatrix34(float *dst, HmdMatrix34_t *src)
+{
+	int c, r;
+
+	for (c = 0; c < 4; ++c)
+	{
+		for (r = 0; r < 4; ++r)
+		{
+			if (r < 3)
+				dst[c * 4 + r] = src->m[r][c];
+			else
+				dst[c * 4 + r] = 0.0f;
+		}
+	}
+}
+
+/*
+===================
+VR_ConvertFromHmdMatrix44
+===================
+*/
+static void VR_ConvertFromHmdMatrix44(float *dst, HmdMatrix44_t *src)
+{
+	int c, r;
+
+	for (c = 0; c < 4; ++c)
+	{
+		for (r = 0; r < 4; ++r)
+		{
+			dst[c * 4 + r] = src->m[r][c];
+		}
+	}
+}
+
+/*
+===================
+VR_GetPosition
+===================
+*/
+void VR_GetPosition(TrackedDevicePose_t pose, float *pos_x, float *pos_y, float *pos_z)
+{
+	HmdMatrix34_t mat;
+
+	mat = pose.mDeviceToAbsoluteTracking;
+
+	*pos_x = mat.m[0][3];
+	*pos_y = mat.m[1][3];
+	*pos_z = mat.m[2][3];
+}
+
+/*
+===================
+VR_GetOrientation
+===================
+*/
+void VR_GetOrientation(TrackedDevicePose_t pose, float *pitch, float *yaw, float *roll)
+{
+	HmdMatrix34_t mat;
+	float pM, a, b, c;
+
+	mat = pose.mDeviceToAbsoluteTracking;
+
+	pM = -mat.m[1][2];
+	if (pM < -1.0f + 0.0000001f)
+	{ // South pole singularity
+		a = 0.0f;
+		b = (float)(M_PI * -0.5);
+		c = (float)atan2(-mat.m[0][1], mat.m[0][0]);
+	}
+	else if (pM > 1.0f - 0.0000001f)
+	{ // North pole singularity
+		a = 0.0f;
+		b = (float)M_PI * 0.5;
+		c = (float)atan2(-mat.m[0][1], mat.m[0][0]);
+	}
+	else
+	{
+		a = (float)atan2(mat.m[0][2], mat.m[2][2]);
+		b = (float)asin(pM);
+		c = (float)atan2(mat.m[1][0], mat.m[1][1]);
+	}
+
+	*pitch = (float)(-b * 180.0f / M_PI);
+	*yaw = (float)(a * 180.0f / M_PI);
+	*roll = (float)(-c * 180.0f / M_PI);
+}
+
+/*
+===================
+VR_UpdatePose
+===================
+*/
+void VR_UpdatePose(void)
+{
+	float seconds_since_vsync, display_frequency, frame_duration, vsync_to_photons, predicted_seconds_from_now;
+
+	vr_hmd->GetTimeSinceLastVsync(&seconds_since_vsync, NULL);
+
+	display_frequency = vr_hmd->GetFloatTrackedDeviceProperty(k_unTrackedDeviceIndex_Hmd, ETrackedDeviceProperty_Prop_DisplayFrequency_Float, NULL);
+	frame_duration = 1.f / display_frequency;
+	vsync_to_photons = vr_hmd->GetFloatTrackedDeviceProperty(k_unTrackedDeviceIndex_Hmd, ETrackedDeviceProperty_Prop_SecondsFromVsyncToPhotons_Float, NULL);
+	predicted_seconds_from_now = frame_duration - seconds_since_vsync + vsync_to_photons;
+
+	vr_hmd->GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin_TrackingUniverseStanding, predicted_seconds_from_now, vr.pose, MAX_VR_TRACKED_DEVICE_POSES);
+}
+
+/*
+===================
+VR_UpdateEyeToHeadTransform
+===================
+*/
+static void VR_UpdateEyeToHeadTransform(void)
+{
+	uint32_t i, c, r;
+	HmdMatrix34_t mat;
+
+	for (i = 0; i < NUM_VR_EYES; ++i)
+	{
+		mat = vr_hmd->GetEyeToHeadTransform(vr.eye[i].vreye);
+
+		for (c = 0; c < 4; ++c)
+		{
+			for (r = 0; r < 3; ++r)
+			{
+				vr.eye[i].eye_to_head_transform[c * 4 + r] = mat.m[r][c];
+			}
+		}
+		vr.eye[i].eye_to_head_transform[0 * 4] = 0.0f;
+		vr.eye[i].eye_to_head_transform[1 * 4] = 0.0f;
+		vr.eye[i].eye_to_head_transform[2 * 4] = 0.0f;
+		vr.eye[i].eye_to_head_transform[3 * 4] = 1.0f;
+	}
+}
+
+/*
+===================
+VR_UpdateProjection
+===================
+*/
+static void VR_UpdateProjection(void)
+{
+	uint32_t i;
+	HmdMatrix44_t mat;
+
+	for (i = 0; i < NUM_VR_EYES; ++i)
+	{
+		mat = vr_hmd->GetProjectionMatrix(vr.eye[i].vreye, 4.0f, 16384.0f);
+		mat.m[1][1] = -mat.m[1][1];
+		VR_ConvertFromHmdMatrix44(vr.eye[i].projection, &mat);
+	}
+	vr.fov_x = (float)(atan(1 / vr.eye[VR_EYE_LEFT].projection[0]) * 360.0f / M_PI);
+	vr.fov_y = (float)(atan(1 / -vr.eye[VR_EYE_LEFT].projection[1 * 4 + 1]) * 360.0f / M_PI);
+}
+
+/*
+===================
 VR_Submit
 ===================
 */
@@ -131,6 +290,9 @@ void VR_Init(void)
 		else
 			vr.eye[i].vreye = EVREye_Eye_Right;
 	}
+
+	VR_UpdateProjection();
+	VR_UpdateEyeToHeadTransform();
 }
 
 /*
