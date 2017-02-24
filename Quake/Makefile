@@ -1,4 +1,4 @@
-# GNU Makefile for vkQuake unix targets, Sep. 10, 2014
+# GNU Makefile for vkQuakeVR unix targets, Sep. 10, 2014
 # You need the SDL library fully installed.
 # "make DEBUG=1" to build a debug client.
 # "make SDL_CONFIG=/path/to/sdl-config" for unusual SDL installations.
@@ -177,7 +177,7 @@ ifeq ($(USE_CODEC_UMX),1)
 CFLAGS+= -DUSE_CODEC_UMX
 endif
 
-COMMON_LIBS:= -lm -l:libvulkan.so.1 -lX11-xcb
+COMMON_LIBS:= -lm -l:libvulkan.so.1 -lX11-xcb -lopenvr_api
 
 LIBS := $(COMMON_LIBS) $(NET_LIBS) $(CODECLIBS)
 
@@ -187,7 +187,7 @@ LIBS := $(COMMON_LIBS) $(NET_LIBS) $(CODECLIBS)
 
 .PHONY:	clean debug release
 
-DEFAULT_TARGET := vkquake
+DEFAULT_TARGET := vkquakevr
 
 # ---------------------------
 # rules
@@ -235,6 +235,8 @@ SHADER_OBJS = \
 	sky_layer_vert.o \
 	postprocess_frag.o \
 	postprocess_vert.o \
+	swapchain_frag.o \
+	swapchain_vert.o \
 	world_frag.o \
 	world_vert.o
 
@@ -283,6 +285,7 @@ OBJS := strlcat.o \
 	menu.o \
 	sbar.o \
 	view.o \
+	vr.o \
 	wad.o \
 	cmd.o \
 	common.o \
@@ -307,11 +310,11 @@ OBJS := strlcat.o \
 # Linux build rules
 # ------------------------
 
-vkquake:	$(OBJS)
+vkquakevr:	$(OBJS)
 	$(LINKER) $(OBJS) $(LDFLAGS) $(LIBS) $(SDL_LIBS) -o $@
 	$(call do_strip,$@)
 
-release:	vkquake
+release:	vkquakevr
 debug:
 	$(error Use "make DEBUG=1")
 
@@ -325,5 +328,5 @@ sbindir ?= $(exec_prefix)/sbin
 INSTALL ?= install
 INSTALL_PROGRAM ?= $(INSTALL)
 INSTALL_DATA ?= ${INSTALL} -m 644
-install: vkquake
-	$(INSTALL_PROGRAM) $(CURDIR)/vkquake $(DESTDIR)$(bindir)/vkquake
+install: vkquakevr
+	$(INSTALL_PROGRAM) $(CURDIR)/vkquakevr $(DESTDIR)$(bindir)/vkquakevr

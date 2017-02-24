@@ -17,10 +17,11 @@
 #define EXTERN_C
 #endif
 
-#define OPENVR_FNTABLE_CALLTYPE __stdcall
+
 
 // OPENVR API export macro
 #if defined( _WIN32 ) && !defined( _X360 )
+	#define OPENVR_FNTABLE_CALLTYPE __stdcall
 	#if defined( OPENVR_API_EXPORTS )
 	#define S_API EXTERN_C __declspec( dllexport )
 	#elif defined( OPENVR_API_NODLL )
@@ -29,12 +30,14 @@
 	#define S_API extern "C" __declspec( dllimport ) 
 	#endif // OPENVR_API_EXPORTS
 #elif defined( __GNUC__ )
+	#define OPENVR_FNTABLE_CALLTYPE
 	#if defined( OPENVR_API_EXPORTS )
 	#define S_API EXTERN_C __attribute__ ((visibility("default")))
 	#else
 	#define S_API EXTERN_C
 	#endif // OPENVR_API_EXPORTS
 #else // !WIN32
+	#define OPENVR_FNTABLE_CALLTYPE
 	#if defined( OPENVR_API_EXPORTS )
 	#define S_API EXTERN_C
 	#else

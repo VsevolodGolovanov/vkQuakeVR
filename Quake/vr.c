@@ -242,12 +242,12 @@ void VR_Init(void)
 	if (i_err != EVRInitError_VRInitError_None)
 		Sys_Error("Couldn't init VR runtime: %s", VR_GetVRInitErrorAsEnglishDescription(i_err));
 
-	sprintf_s(fntable_name, sizeof(fntable_name), "FnTable:%s", IVRSystem_Version);
+	q_snprintf(fntable_name, sizeof(fntable_name), "FnTable:%s", IVRSystem_Version);
 	vr_hmd = (VrSystem)VR_GetGenericInterface(fntable_name, &i_err);
 	if (i_err != EVRInitError_VRInitError_None)
 		Sys_Error("Couldn't get VR system interface: %s", VR_GetVRInitErrorAsEnglishDescription(i_err));
 
-	sprintf_s(fntable_name, sizeof(fntable_name), "FnTable:%s", IVRCompositor_Version);
+	q_snprintf(fntable_name, sizeof(fntable_name), "FnTable:%s", IVRCompositor_Version);
 	vr_compositor = (VrCompositor)VR_GetGenericInterface(fntable_name, &i_err);
 	if (i_err != EVRInitError_VRInitError_None)
 		Sys_Error("Couldn't get VR compositor interface: %s", VR_GetVRInitErrorAsEnglishDescription(i_err));
