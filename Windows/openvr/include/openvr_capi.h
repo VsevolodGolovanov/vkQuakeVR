@@ -1865,6 +1865,8 @@ S_API intptr_t VR_GetGenericInterface( const char *pchInterfaceVersion, EVRInitE
 S_API bool VR_IsRuntimeInstalled();
 S_API const char * VR_GetVRInitErrorAsSymbol( EVRInitError error );
 S_API const char * VR_GetVRInitErrorAsEnglishDescription( EVRInitError error );
+S_API uint32_t VR_GetInitToken();
+S_API bool VR_IsInterfaceVersionValid(const char *pchInterfaceVersion);
 
 
 #endif // __OPENVR_API_FLAT_H__

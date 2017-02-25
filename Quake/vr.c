@@ -26,10 +26,15 @@ typedef struct VR_IVRCompositor_FnTable	*VrCompositor;
 
 vrdef_t	vr;				// global vr state
 
-//====================================
-
+static uint32_t		vr_token;
 static VrSystem		vr_hmd;
-static VrCompositor	vr_compositor;
+static VrSystem		vr_context_system;
+static VrCompositor	vr_context_compositor;
+
+static void			VR_Context_Clear();
+static void			VR_Context_CheckClear();
+static VrSystem		VR_System();
+static VrCompositor	VR_Compositor();
 
 /*
 ===================
@@ -199,10 +204,10 @@ void VR_Submit(uint32_t eye, VkImage color_buffer)
 {
 	vr.eye[eye].texture_data.m_nImage = (uint64_t)color_buffer;
 	
-	vr_compositor->Submit(vr.eye[eye].vreye, &vr.eye[eye].texture, NULL, EVRSubmitFlags_Submit_Default);
+	VR_Compositor()->Submit(vr.eye[eye].vreye, &vr.eye[eye].texture, NULL, EVRSubmitFlags_Submit_Default);
 
 	if (eye == VR_EYE_RIGHT)
-		vr_compositor->WaitGetPoses(NULL, 0, NULL, 0);
+		VR_Compositor()->WaitGetPoses(NULL, 0, NULL, 0);
 }
 
 /*
@@ -212,7 +217,7 @@ VR_GetVulkanInstanceExtensionsRequired
 */
 uint32_t VR_GetVulkanInstanceExtensionsRequired(char *extension_names, uint32_t buffer_size)
 {
-	return vr_compositor->GetVulkanInstanceExtensionsRequired(extension_names, buffer_size);
+	return VR_Compositor()->GetVulkanInstanceExtensionsRequired(extension_names, buffer_size);
 }
 
 /*
@@ -222,7 +227,7 @@ VR_GetVulkanDeviceExtensionsRequired
 */
 uint32_t VR_GetVulkanDeviceExtensionsRequired(struct VkPhysicalDevice_T *physical_device, char *extension_names, uint32_t buffer_size)
 {
-	return vr_compositor->GetVulkanDeviceExtensionsRequired(physical_device, extension_names, buffer_size);
+	return VR_Compositor()->GetVulkanDeviceExtensionsRequired(physical_device, extension_names, buffer_size);
 }
 
 /*
@@ -233,25 +238,23 @@ VR_Init
 void VR_Init(void)
 {
 	EVRInitError	i_err;
-	char			fntable_name[128];
 	uint32_t		i;
 
 	Con_Printf("\nVR Initialization\n");
 
-	VR_InitInternal(&i_err, EVRApplicationType_VRApplication_Scene);
+	vr_token = VR_InitInternal(&i_err, EVRApplicationType_VRApplication_Scene);
+	VR_Context_Clear();
+
+	if (i_err == EVRInitError_VRInitError_None)
+	{
+		if (VR_IsInterfaceVersionValid(IVRSystem_Version))
+			vr_hmd = VR_System();
+		else
+			i_err = EVRInitError_VRInitError_Init_InterfaceNotFound;
+	}
 	if (i_err != EVRInitError_VRInitError_None)
 		Sys_Error("Couldn't init VR runtime: %s", VR_GetVRInitErrorAsEnglishDescription(i_err));
-
-	q_snprintf(fntable_name, sizeof(fntable_name), "FnTable:%s", IVRSystem_Version);
-	vr_hmd = (VrSystem)VR_GetGenericInterface(fntable_name, &i_err);
-	if (i_err != EVRInitError_VRInitError_None)
-		Sys_Error("Couldn't get VR system interface: %s", VR_GetVRInitErrorAsEnglishDescription(i_err));
-
-	q_snprintf(fntable_name, sizeof(fntable_name), "FnTable:%s", IVRCompositor_Version);
-	vr_compositor = (VrCompositor)VR_GetGenericInterface(fntable_name, &i_err);
-	if (i_err != EVRInitError_VRInitError_None)
-		Sys_Error("Couldn't get VR compositor interface: %s", VR_GetVRInitErrorAsEnglishDescription(i_err));
-
+	
 	ETrackedPropertyError p_err;
 	char *buf;
 	uint32_t len;
@@ -306,6 +309,74 @@ void VR_Shutdown (void)
 	{
 		VR_ShutdownInternal();
 		vr_hmd = NULL;
-		vr_compositor = NULL;
 	}
+}
+
+/*
+=================
+VR_Context_Clear
+=================
+*/
+static inline void VR_Context_Clear()
+{
+	vr_context_system = NULL;
+	vr_context_compositor = NULL;
+}
+
+/*
+=================
+VR_Context_CheckClear
+=================
+*/
+static inline void VR_Context_CheckClear()
+{
+	if (vr_token != VR_GetInitToken())
+	{
+		VR_Context_Clear();
+		vr_token = VR_GetInitToken();
+	}
+}
+
+/*
+=================
+VR_System
+=================
+*/
+static VrSystem VR_System()
+{
+	EVRInitError	err;
+	char			fntable_name[128];
+
+	VR_Context_CheckClear();
+
+	if (!vr_context_system)
+	{
+		q_snprintf(fntable_name, sizeof(fntable_name), "FnTable:%s", IVRSystem_Version);
+		vr_context_system = (VrSystem)VR_GetGenericInterface(fntable_name, &err);
+		if (err != EVRInitError_VRInitError_None)
+			Sys_Error("Couldn't get VR system interface: %s", VR_GetVRInitErrorAsEnglishDescription(err));
+	}
+	return vr_context_system;
+}
+
+/*
+=================
+VR_Compositor
+=================
+*/
+static VrCompositor VR_Compositor()
+{
+	EVRInitError	err;
+	char			fntable_name[128];
+
+	VR_Context_CheckClear();
+
+	if (!vr_context_compositor)
+	{
+		q_snprintf(fntable_name, sizeof(fntable_name), "FnTable:%s", IVRCompositor_Version);
+		vr_context_compositor = (VrCompositor)VR_GetGenericInterface(fntable_name, &err);
+		if (err != EVRInitError_VRInitError_None)
+			Sys_Error("Couldn't get VR compositor interface: %s", VR_GetVRInitErrorAsEnglishDescription(err));
+	}
+	return vr_context_compositor;
 }
