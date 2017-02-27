@@ -21,6 +21,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "quakedef.h"
 
+#define VR_SIDEMOVE_SPEED			200.0f
+#define VR_FORWARDMOVE_SPEED		200.0f
+#define VR_KEYINPUT_AXIS_DEADZONE	0.3f
+
+typedef struct VREvent_t VREvent_t;
 typedef struct VR_IVRSystem_FnTable		*VrSystem;
 typedef struct VR_IVRCompositor_FnTable	*VrCompositor;
 
@@ -35,6 +40,11 @@ static void			VR_Context_Clear();
 static void			VR_Context_CheckClear();
 static VrSystem		VR_System();
 static VrCompositor	VR_Compositor();
+
+static void			VR_ProcessEvent(VREvent_t event);
+static void			VR_Event_Button(VREvent_t event);
+static qboolean		VR_GetControllerAxisState(ETrackedControllerRole role, EVRControllerAxisType axis_type, float *x, float *y);
+static int			VR_GetKeyForAxisState(float x, float y);
 
 /*
 ===================
@@ -72,6 +82,168 @@ static void VR_ConvertFromHmdMatrix44(float *dst, HmdMatrix44_t *src)
 		{
 			dst[c * 4 + r] = src->m[r][c];
 		}
+	}
+}
+
+/*
+===================
+VR_ProcessEvents
+===================
+*/
+void VR_ProcessEvents()
+{
+	VREvent_t event;
+
+	while (vr_hmd->PollNextEvent(&event, sizeof(event)))
+		VR_ProcessEvent(event);
+}
+
+/*
+===================
+VR_ProcessEvent
+===================
+*/
+static void VR_ProcessEvent(VREvent_t event)
+{
+	switch (event.eventType)
+	{
+	case EVREventType_VREvent_ButtonPress:
+	case EVREventType_VREvent_ButtonUnpress:
+		VR_Event_Button(event);
+		break;
+	default:
+		break;
+	}
+}
+
+/*
+===================
+VR_Event_Button
+===================
+*/
+static void VR_Event_Button(VREvent_t event)
+{
+	ETrackedControllerRole role;
+	qboolean down;
+	float x, y;
+	int key;
+	
+	role = vr_hmd->GetControllerRoleForTrackedDeviceIndex(event.trackedDeviceIndex);
+	down = (event.eventType == EVREventType_VREvent_ButtonPress) ? true : false;
+
+	if (role == ETrackedControllerRole_TrackedControllerRole_RightHand)
+	{
+		switch (event.data.controller.button)
+		{
+		case EVRButtonId_k_EButton_SteamVR_Trigger: Key_Event(K_CTRL, down); break;
+		case EVRButtonId_k_EButton_ApplicationMenu: Key_Event('/', down); break;
+		default: break;
+		}
+	}
+	else if (role == ETrackedControllerRole_TrackedControllerRole_LeftHand)
+	{
+		switch (event.data.controller.button)
+		{
+		case EVRButtonId_k_EButton_SteamVR_Trigger: Key_Event(K_ENTER, down); break;
+		case EVRButtonId_k_EButton_Grip: Key_Event(K_ESCAPE, down); break;
+		case EVRButtonId_k_EButton_SteamVR_Touchpad:
+			if (key_dest != key_game)
+			{
+				if (VR_GetControllerAxisState(role, EVRControllerAxisType_k_eControllerAxis_TrackPad, &x, &y))
+				{
+					key = VR_GetKeyForAxisState(x, y);
+					if (key)
+						Key_Event(key, down);
+				}
+			}
+			break;
+		default: break;
+		}
+	}
+}
+
+/*
+===================
+VR_GetControllerAxisState
+===================
+*/
+static qboolean VR_GetControllerAxisState(ETrackedControllerRole role, EVRControllerAxisType axis_type, float *x, float *y)
+{
+	ETrackedPropertyError	err;
+	TrackedDeviceIndex_t	device_index;
+	VRControllerState_t		state;
+	uint32_t				i;
+	int32_t					found_axis_type;
+	
+	*x = 0.0f;
+	*y = 0.0f;
+
+	device_index = vr_hmd->GetTrackedDeviceIndexForControllerRole(role);
+
+	if (vr_hmd->GetControllerState(device_index, &state, sizeof(state)))
+	{
+		for (i = 0; i < k_unControllerStateAxisCount; ++i)
+		{
+			found_axis_type = vr_hmd->GetInt32TrackedDeviceProperty(device_index, ETrackedDeviceProperty_Prop_Axis0Type_Int32 + i, &err);
+
+			if (err == ETrackedPropertyError_TrackedProp_Success && found_axis_type == axis_type)
+			{
+				*x = state.rAxis[i].x;
+				*y = state.rAxis[i].y;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+/*
+===================
+VR_GetKeyForAxisState
+===================
+*/
+static int VR_GetKeyForAxisState(float x, float y)
+{
+	vec3_t vector;
+	float angle;
+
+	vector[0] = x;
+	vector[1] = y;
+	vector[2] = 0.0f;
+
+	if (VectorLength(vector) > VR_KEYINPUT_AXIS_DEADZONE)
+	{
+		angle = atan2(y, x) / M_PI_DIV_180;
+
+		if (angle <= 135.0f && angle > 45.0f)
+			return K_UPARROW;
+		else if (angle <= 45.0f && angle > -45.0f)
+			return K_RIGHTARROW;
+		else if (angle <= -45.0f && angle > -135.0f)
+			return K_DOWNARROW;
+		else
+			return K_LEFTARROW;
+	}
+	else
+	{
+		return 0;
+	}
+}
+
+/*
+===================
+VR_InputMove
+===================
+*/
+void VR_InputMove(usercmd_t *cmd)
+{
+	float x, y;
+	
+	if (VR_GetControllerAxisState(ETrackedControllerRole_TrackedControllerRole_LeftHand, EVRControllerAxisType_k_eControllerAxis_TrackPad, &x, &y) ||
+		VR_GetControllerAxisState(ETrackedControllerRole_TrackedControllerRole_LeftHand, EVRControllerAxisType_k_eControllerAxis_Joystick, &x, &y))
+	{
+		cmd->sidemove += VR_SIDEMOVE_SPEED * x;
+		cmd->forwardmove += VR_FORWARDMOVE_SPEED * y;
 	}
 }
 

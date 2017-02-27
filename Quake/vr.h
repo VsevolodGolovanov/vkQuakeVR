@@ -53,6 +53,8 @@ extern	vrdef_t vr;				// global vr state
 void		VR_Init (void);
 void		VR_Shutdown (void);
 
+void		VR_ProcessEvents();
+void		VR_InputMove(usercmd_t *cmd);
 void		VR_GetPosition(TrackedDevicePose_t pose, float *pos_x, float *pos_y, float *pos_z);
 void		VR_GetOrientation(TrackedDevicePose_t pose, float *pitch, float *yaw, float *roll);
 void		VR_UpdatePose(void);

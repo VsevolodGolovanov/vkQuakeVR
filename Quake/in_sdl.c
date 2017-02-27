@@ -569,6 +569,7 @@ void IN_Move(usercmd_t *cmd)
 {
 	IN_JoyMove(cmd);
 	IN_MouseMove(cmd);
+	VR_InputMove(cmd);
 }
 
 void IN_ClearStates (void)
