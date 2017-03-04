@@ -384,6 +384,58 @@ void VR_Submit(uint32_t eye, VkImage color_buffer)
 
 /*
 ===================
+VR_UpdateHiddenAreaMesh
+===================
+*/
+static void VR_UpdateHiddenAreaMesh(void)
+{
+	uint32_t i;
+
+	for (i = 0; i < NUM_VR_EYES; ++i)
+	{
+		vr.eye[i].hidden_area_mesh = vr_hmd->GetHiddenAreaMesh(vr.eye[i].vreye, EHiddenAreaMeshType_k_eHiddenAreaMesh_Standard);
+	}
+}
+
+/*
+=============
+VR_DrawHiddenAreaMesh
+=============
+*/
+void VR_DrawHiddenAreaMesh(void)
+{
+	int vertex_count = vr.eye[vr.current_eye].hidden_area_mesh.unTriangleCount * 3;
+	
+	if (!vertex_count)
+		return;
+
+	GL_SetCanvas(CANVAS_HIDDENAREAMESH);
+
+	int i;
+	VkBuffer buffer;
+	VkDeviceSize buffer_offset;
+	basicvertex_t * vertices = (basicvertex_t*)R_VertexAllocate(vertex_count * sizeof(basicvertex_t), &buffer, &buffer_offset);
+
+	for (i = 0; i < vertex_count; ++i)
+	{
+		vertices[i].position[0] = vr.eye[vr.current_eye].hidden_area_mesh.pVertexData[i].v[0];
+		vertices[i].position[1] = vr.eye[vr.current_eye].hidden_area_mesh.pVertexData[i].v[1];
+		vertices[i].position[2] = 0.0f;
+		vertices[i].texcoord[0] = 0.0f;
+		vertices[i].texcoord[1] = 0.0f;
+		vertices[i].color[0] = 0;
+		vertices[i].color[1] = 0;
+		vertices[i].color[2] = 0;
+		vertices[i].color[3] = 255;
+	}
+
+	vkCmdBindVertexBuffers(vulkan_globals.command_buffer, 0, 1, &buffer, &buffer_offset);
+	vkCmdBindPipeline(vulkan_globals.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vulkan_globals.hidden_area_mesh_pipeline);
+	vkCmdDraw(vulkan_globals.command_buffer, vertex_count, 1, 0, 0);
+}
+
+/*
+===================
 VR_GetVulkanInstanceExtensionsRequired
 ===================
 */
@@ -466,6 +518,7 @@ void VR_Init(void)
 			vr.eye[i].vreye = EVREye_Eye_Right;
 	}
 
+	VR_UpdateHiddenAreaMesh();
 	VR_UpdateProjection();
 	VR_UpdateEyeToHeadTransform();
 }

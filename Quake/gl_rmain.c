@@ -365,6 +365,8 @@ void R_SetupScene (void)
 	render_pass_index = 0;
 	vkCmdBeginRenderPass(vulkan_globals.command_buffer, &vulkan_globals.main_render_pass_begin_infos[render_warp ? 1 : 0], VK_SUBPASS_CONTENTS_INLINE);
 
+	VR_DrawHiddenAreaMesh();
+
 	R_AnimateLight ();
 	r_framecount++;
 	R_SetupMatrix ();

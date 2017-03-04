@@ -1179,7 +1179,7 @@ void R_CreatePipelines()
 
 	shader_stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	shader_stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-	shader_stages[1].module = basic_alphatest_frag_module;
+	shader_stages[1].module = basic_notex_frag_module;
 	shader_stages[1].pName = "main";
 
 	VkVertexInputAttributeDescription basic_vertex_input_attribute_descriptions[3];
@@ -1236,7 +1236,7 @@ void R_CreatePipelines()
 	VkPipelineMultisampleStateCreateInfo multisample_state_create_info;
 	memset(&multisample_state_create_info, 0, sizeof(multisample_state_create_info));
 	multisample_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-	multisample_state_create_info.rasterizationSamples = vulkan_globals.sample_count;
+	multisample_state_create_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 	if (vulkan_globals.supersampling)
 	{
 		multisample_state_create_info.sampleShadingEnable = VK_TRUE;
@@ -1246,8 +1246,8 @@ void R_CreatePipelines()
 	VkPipelineDepthStencilStateCreateInfo depth_stencil_state_create_info;
 	memset(&depth_stencil_state_create_info, 0, sizeof(depth_stencil_state_create_info));
 	depth_stencil_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-	depth_stencil_state_create_info.depthTestEnable = VK_FALSE;
-	depth_stencil_state_create_info.depthWriteEnable = VK_FALSE;
+	depth_stencil_state_create_info.depthTestEnable = VK_TRUE;
+	depth_stencil_state_create_info.depthWriteEnable = VK_TRUE;
 	depth_stencil_state_create_info.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
 	depth_stencil_state_create_info.depthBoundsTestEnable = VK_FALSE;
 	depth_stencil_state_create_info.back.failOp = VK_STENCIL_OP_KEEP;
@@ -1283,9 +1283,26 @@ void R_CreatePipelines()
 	pipeline_create_info.renderPass = vulkan_globals.main_render_pass;
 
 	//================
+	// Hidden area mesh
+	//================
+	input_assembly_state_create_info.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+	pipeline_create_info.renderPass = vulkan_globals.main_render_pass;
+
+	err = vkCreateGraphicsPipelines(vulkan_globals.device, VK_NULL_HANDLE, 1, &pipeline_create_info, NULL, &vulkan_globals.hidden_area_mesh_pipeline);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkCreateGraphicsPipelines failed");
+
+	GL_SetObjectName((uint64_t)vulkan_globals.hidden_area_mesh_pipeline, VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT, "hidden_area_mesh");
+
+	//================
 	// Basic pipelines
 	//================
 	input_assembly_state_create_info.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+	shader_stages[1].module = basic_alphatest_frag_module;
+
+	depth_stencil_state_create_info.depthWriteEnable = VK_FALSE;
 
 	for (render_pass = 0; render_pass < 2; ++render_pass)
 	{
@@ -1758,6 +1775,7 @@ void R_DestroyPipelines(void)
 	vkDestroyPipeline(vulkan_globals.device, vulkan_globals.alias_blend_pipeline, NULL);
 	vkDestroyPipeline(vulkan_globals.device, vulkan_globals.postprocess_pipeline, NULL);
 	vkDestroyPipeline(vulkan_globals.device, vulkan_globals.swapchain_pipeline, NULL);
+	vkDestroyPipeline(vulkan_globals.device, vulkan_globals.hidden_area_mesh_pipeline, NULL);
 }
 
 /*

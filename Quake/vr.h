@@ -33,6 +33,7 @@ typedef struct
 	EVREye					vreye;
 	Texture_t				texture;
 	VRVulkanTextureData_t	texture_data;
+	HiddenAreaMesh_t		hidden_area_mesh;
 	float					eye_to_head_transform[16];
 	float					projection[16];
 } vreye_t;
@@ -59,6 +60,7 @@ void		VR_GetPosition(TrackedDevicePose_t pose, float *pos_x, float *pos_y, float
 void		VR_GetOrientation(TrackedDevicePose_t pose, float *pitch, float *yaw, float *roll);
 void		VR_UpdatePose(void);
 void		VR_Submit(uint32_t eye, VkImage color_buffer);
+void		VR_DrawHiddenAreaMesh(void);
 uint32_t	VR_GetVulkanInstanceExtensionsRequired(char *extension_names, uint32_t buffer_size);
 uint32_t	VR_GetVulkanDeviceExtensionsRequired(struct VkPhysicalDevice_T *physical_device, char *extension_names, uint32_t buffer_size);
 

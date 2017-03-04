@@ -923,6 +923,10 @@ void GL_SetCanvas (canvastype newcanvas)
 		GL_OrthoMatrix (0, 320, 200, 0, -99999, 99999);
 		GL_Viewport (glx+glwidth-320*s, gly+glheight-200*s, 320*s, 200*s);
 		break;
+	case CANVAS_HIDDENAREAMESH:
+		GL_OrthoMatrix(0, 1, 0, 1, -99999, 99999);
+		GL_Viewport(glx, gly, glwidth, glheight);
+		break;
 	default:
 		Sys_Error ("GL_SetCanvas: bad canvas type");
 	}

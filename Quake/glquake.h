@@ -157,6 +157,7 @@ typedef struct
 	VkPipelineLayout					postprocess_pipeline_layout;
 	VkPipeline							swapchain_pipeline;
 	VkPipelineLayout					swapchain_pipeline_layout;
+	VkPipeline							hidden_area_mesh_pipeline;
 	VkPipeline							screen_warp_pipeline;
 	VkPipelineLayout					screen_warp_pipeline_layout;
 
