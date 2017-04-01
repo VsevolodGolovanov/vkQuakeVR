@@ -1064,6 +1064,17 @@ typedef EVRScreenshotError VRScreenshotsError;
 
 // OpenVR Structs
 
+#if defined(__linux__) || defined(__APPLE__) 
+	// The 32-bit version of gcc has the alignment requirement for uint64 and double set to
+	// 4 meaning that even with #pragma pack(8) these types will only be four-byte aligned.
+	// The 64-bit version of gcc has the alignment requirement for these types set to
+	// 8 meaning that unless we use #pragma pack(4) our structures will get bigger.
+	// The 64-bit structure packing has to match the 32-bit structure packing for each platform.
+	#pragma pack( push, 4 )
+#else
+	#pragma pack( push, 8 )
+#endif
+
 typedef struct HmdMatrix34_t
 {
 	float m[3][4]; //float[3][4]
@@ -1524,6 +1535,8 @@ struct VROverlayIntersectionMaskPrimitive_t
 	EVROverlayIntersectionMaskPrimitiveType m_nPrimitiveType;
 	VROverlayIntersectionMaskPrimitive_Data_t m_Primitive;
 };
+
+#pragma pack( pop )
 
 
 // OpenVR Function Pointer Tables
