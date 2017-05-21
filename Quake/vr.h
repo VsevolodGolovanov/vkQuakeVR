@@ -64,5 +64,15 @@ void		VR_DrawHiddenAreaMesh(void);
 uint32_t	VR_GetVulkanInstanceExtensionsRequired(char *extension_names, uint32_t buffer_size);
 uint32_t	VR_GetVulkanDeviceExtensionsRequired(struct VkPhysicalDevice_T *physical_device, char *extension_names, uint32_t buffer_size);
 
+S_API intptr_t VR_InitInternal(EVRInitError *peError, EVRApplicationType eType);
+S_API void VR_ShutdownInternal();
+S_API bool VR_IsHmdPresent();
+S_API intptr_t VR_GetGenericInterface(const char *pchInterfaceVersion, EVRInitError *peError);
+S_API bool VR_IsRuntimeInstalled();
+S_API const char * VR_GetVRInitErrorAsSymbol(EVRInitError error);
+S_API const char * VR_GetVRInitErrorAsEnglishDescription(EVRInitError error);
+S_API uint32_t VR_GetInitToken();
+S_API bool VR_IsInterfaceVersionValid(const char *pchInterfaceVersion);
+
 #endif	/* __VR_DEFS_H */
 
