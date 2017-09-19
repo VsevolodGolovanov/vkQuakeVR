@@ -76,6 +76,8 @@ Used by view and sv_user
 */
 float V_CalcRoll (vec3_t angles, vec3_t velocity)
 {
+	return 0; // not in vr
+
 	vec3_t	forward, right, up;
 	float	sign;
 	float	side;
@@ -140,6 +142,7 @@ cvar_t	v_centerspeed = {"v_centerspeed","500", CVAR_NONE};
 
 void V_StartPitchDrift (void)
 {
+	return; // not in vr
 #if 1
 	if (cl.laststop == cl.time)
 	{
@@ -740,7 +743,7 @@ void V_CalcRefdef (void)
 	static vec3_t punch = {0,0,0}; //johnfitz -- v_gunkick
 	float delta; //johnfitz -- v_gunkick
 
-	V_DriftPitch ();
+	// V_DriftPitch (); not in vr
 
 // ent is the player model (visible when out of body)
 	ent = &cl_entities[cl.viewentity];
@@ -753,7 +756,7 @@ void V_CalcRefdef (void)
 	ent->angles[YAW] = cl.viewangles[YAW];	// the model should face the view dir
 	ent->angles[PITCH] = -cl.viewangles[PITCH];	// the model should face the view dir
 
-	bob = V_CalcBob ();
+	bob = 0;// V_CalcBob(); not in vr
 
 // refresh position
 	VectorCopy (ent->origin, r_refdef.vieworg);
@@ -868,10 +871,12 @@ void V_RenderView (void)
 		return;
 	}
 
-	if (cl.intermission)
-		V_CalcIntermissionRefdef ();
-	else if (!cl.paused /* && (cl.maxclients > 1 || key_dest == key_game) */)
-		V_CalcRefdef ();
+	if (vr.current_eye == VR_EYE_LEFT) {
+		if (cl.intermission)
+			V_CalcIntermissionRefdef();
+		else if (!cl.paused /* && (cl.maxclients > 1 || key_dest == key_game) */)
+			V_CalcRefdef();
+	}
 
 	//johnfitz -- removed lcd code
 
