@@ -510,20 +510,21 @@ void R_DrawViewModel (void)
 	//johnfitz
 
 	// hack the depth range to prevent view model from poking into walls
-	VkViewport viewport;
-	viewport.x = 0;
-	viewport.y = 0;
-	viewport.width = vr.width;
-	viewport.height = vr.height;
-	viewport.minDepth = 0.0f;
-	viewport.maxDepth = 0.3f;
-	vkCmdSetViewport(vulkan_globals.command_buffer, 0, 1, &viewport);
-	
+	// not in VR
+// 	VkViewport viewport;
+// 	viewport.x = 0;
+// 	viewport.y = 0;
+// 	viewport.width = vr.width;
+// 	viewport.height = vr.height;
+// 	viewport.minDepth = 0.0f;
+// 	viewport.maxDepth = 0.3f;
+// 	vkCmdSetViewport(vulkan_globals.command_buffer, 0, 1, &viewport);
+
 	R_DrawAliasModel (currententity);
 
-	viewport.minDepth = 0.0f;
-	viewport.maxDepth = 1.0f;
-	vkCmdSetViewport(vulkan_globals.command_buffer, 0, 1, &viewport);
+// 	viewport.minDepth = 0.0f;
+// 	viewport.maxDepth = 1.0f;
+// 	vkCmdSetViewport(vulkan_globals.command_buffer, 0, 1, &viewport);
 }
 
 /*

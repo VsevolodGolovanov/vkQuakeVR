@@ -35,5 +35,8 @@ void V_UpdateBlend (void);
 float V_CalcRoll (vec3_t angles, vec3_t velocity);
 //void V_UpdatePalette (void); //johnfitz
 
+void VR_SetAngles(vec3_t angles);
+void VR_ResetOrientation();
+
 #endif	/* _QUAKE_VIEW_H */
 

@@ -1040,6 +1040,7 @@ void CL_ParseServerMessage (void)
 		case svc_setangle:
 			for (i=0 ; i<3 ; i++)
 				cl.viewangles[i] = MSG_ReadAngle (cl.protocolflags);
+			VR_SetAngles(cl.viewangles);
 			break;
 
 		case svc_setview:

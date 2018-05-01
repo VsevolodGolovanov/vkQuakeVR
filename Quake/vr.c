@@ -46,6 +46,9 @@ static void			VR_Event_Button(VREvent_t event);
 static qboolean		VR_GetControllerAxisState(ETrackedControllerRole role, EVRControllerAxisType axis_type, float *x, float *y);
 static int			VR_GetKeyForAxisState(float x, float y);
 
+cvar_t vr_lefthanded = { "vr_lefthanded", "0", CVAR_NONE };
+cvar_t vr_gunangle = { "vr_gunangle", "32", CVAR_NONE };
+
 /*
 ===================
 VR_ConvertFromHmdMatrix34
@@ -261,6 +264,31 @@ void VR_GetPosition(TrackedDevicePose_t pose, float *pos_x, float *pos_y, float 
 	*pos_x = mat.m[0][3];
 	*pos_y = mat.m[1][3];
 	*pos_z = mat.m[2][3];
+}
+
+TrackedDevicePose_t* VR_GetControllerPosition(ETrackedControllerRole role, float *pos_x, float *pos_y, float *pos_z)
+{
+	TrackedDeviceIndex_t index = vr_hmd->GetTrackedDeviceIndexForControllerRole(role);
+	TrackedDevicePose_t pose = vr.pose[index];
+	if (pose.bPoseIsValid) {
+		VR_GetPosition(pose, pos_x, pos_y, pos_z);
+		return &vr.pose[index];
+	}
+	else {
+		return NULL;
+	}
+}
+
+/*
+===================
+VR_GetVelocity
+===================
+*/
+void VR_GetVelocity(TrackedDevicePose_t pose, float *x, float *y, float *z)
+{
+	*x = pose.vVelocity.v[0];
+	*y = pose.vVelocity.v[1];
+	*z = pose.vVelocity.v[2];
 }
 
 /*
@@ -518,9 +546,14 @@ void VR_Init(void)
 			vr.eye[i].vreye = EVREye_Eye_Right;
 	}
 
+	VR_ResetOrientation();
+
 	VR_UpdateHiddenAreaMesh();
 	VR_UpdateProjection();
 	VR_UpdateEyeToHeadTransform();
+
+	Cvar_RegisterVariable(&vr_lefthanded);
+	Cvar_RegisterVariable(&vr_gunangle);
 }
 
 /*
@@ -605,3 +638,180 @@ static VrCompositor VR_Compositor()
 	}
 	return vr_context_compositor;
 }
+
+// Transforms a HMD Matrix34 to a Vector3
+// Math borrowed from https://github.com/Omnifinity/OpenVR-Tracking-Example
+HmdVector3_t Matrix34ToVector(HmdMatrix34_t in)
+{
+	HmdVector3_t vector;
+
+	vector.v[0] = in.m[0][3];
+	vector.v[1] = in.m[1][3];
+	vector.v[2] = in.m[2][3];
+
+	return vector;
+}
+
+// Transforms a HMD Matrix34 to a Quaternion
+// Function logic nicked from https://github.com/Omnifinity/OpenVR-Tracking-Example
+HmdQuaternion_t Matrix34ToQuaternion(HmdMatrix34_t in)
+{
+	HmdQuaternion_t q;
+
+	q.w = sqrt(fmax(0, 1 + in.m[0][0] + in.m[1][1] + in.m[2][2])) / 2;
+	q.x = sqrt(fmax(0, 1 + in.m[0][0] - in.m[1][1] - in.m[2][2])) / 2;
+	q.y = sqrt(fmax(0, 1 - in.m[0][0] + in.m[1][1] - in.m[2][2])) / 2;
+	q.z = sqrt(fmax(0, 1 - in.m[0][0] - in.m[1][1] + in.m[2][2])) / 2;
+	q.x = copysign(q.x, in.m[2][1] - in.m[1][2]);
+	q.y = copysign(q.y, in.m[0][2] - in.m[2][0]);
+	q.z = copysign(q.z, in.m[1][0] - in.m[0][1]);
+	return q;
+}
+
+// Following functions borrowed from http://icculus.org/~phaethon/q3a/misc/quats.html
+void AnglesToQuat(const vec3_t angles, vec4_t quat)
+{
+	vec3_t a;
+	float cr, cp, cy, sr, sp, sy, cpcy, spsy;
+
+	a[PITCH] = (M_PI / 360.0) * angles[PITCH];
+	a[YAW] = (M_PI / 360.0) * angles[YAW];
+	a[ROLL] = (M_PI / 360.0) * angles[ROLL];
+
+	cr = cos(a[ROLL]);
+	cp = cos(a[PITCH]);
+	cy = cos(a[YAW]);
+
+	sr = sin(a[ROLL]);
+	sp = sin(a[PITCH]);
+	sy = sin(a[YAW]);
+
+	cpcy = cp * cy;
+	spsy = sp * sy;
+	quat[0] = cr * cpcy + sr * spsy; // w
+	quat[1] = sr * cpcy - cr * spsy; // x
+	quat[2] = cr * sp * cy + sr * cp * sy; // y
+	quat[3] = cr * cp * sy - sr * sp * cy; // z
+}
+
+HmdQuaternion_t AnglesToHmdQuat(const vec3_t angles)
+{
+	HmdQuaternion_t final;
+	vec3_t a;
+	float cr, cp, cy, sr, sp, sy, cpcy, spsy;
+
+	a[PITCH] = (M_PI / 360.0) * angles[PITCH];
+	a[YAW] = (M_PI / 360.0) * angles[YAW];
+	a[ROLL] = (M_PI / 360.0) * angles[ROLL];
+
+	cr = cos(a[ROLL]);
+	cp = cos(a[PITCH]);
+	cy = cos(a[YAW]);
+
+	sr = sin(a[ROLL]);
+	sp = sin(a[PITCH]);
+	sy = sin(a[YAW]);
+
+	cpcy = cp * cy;
+	spsy = sp * sy;
+	final.w = cr * cpcy + sr * spsy; // w
+	final.x = sr * cpcy - cr * spsy; // x
+	final.y = cr * sp * cy + sr * cp * sy; // y
+	final.z = cr * cp * sy - sr * sp * cy; // z
+
+	return final;
+}
+
+// Converts a quaternion to a euler angle
+void QuatToAngles(const vec4_t q, vec3_t a)
+{
+	vec4_t q2;
+	q2[0] = q[0] * q[0];
+	q2[1] = q[1] * q[1];
+	q2[2] = q[2] * q[2];
+	q2[3] = q[3] * q[3];
+	a[ROLL] = (180.0 / M_PI)*atan2(2 * (q[2] * q[3] + q[1] * q[0]), (-q2[1] - q2[2] + q2[3] + q2[0]));
+	a[PITCH] = (180.0 / M_PI)*asin(-2 * (q[1] * q[3] - q[2] * q[0]));
+	a[YAW] = (180.0 / M_PI)*atan2(2 * (q[1] * q[2] + q[3] * q[0]), (q2[1] - q2[2] - q2[3] + q2[0]));
+}
+
+// HmdQuaternion_t version
+void HmdQuatToAngles(const HmdQuaternion_t q, vec3_t a)
+{
+	vec4_t q2;
+	q2[0] = q.w * q.w;
+	q2[1] = q.x * q.x;
+	q2[2] = q.y * q.y;
+	q2[3] = q.z * q.z;
+	a[ROLL] = (180.0 / M_PI)*atan2(2 * (q.y * q.z + q.x * q.w), (-q2[1] - q2[2] + q2[3] + q2[0]));
+	a[PITCH] = (180.0 / M_PI)*asin(-2 * (q.x * q.z - q.y * q.w));
+	a[YAW] = (180.0 / M_PI)*atan2(2 * (q.x * q.y + q.z * q.w), (q2[1] - q2[2] - q2[3] + q2[0]));
+}
+
+// Rotates a vector by a quaternion and returns the results
+// Based on math from https://gamedev.stackexchange.com/questions/28395/rotating-vector3-by-a-quaternion
+HmdVector3_t RotateVectorByQuaternion(HmdVector3_t v, HmdQuaternion_t q)
+{
+	HmdVector3_t u, result;
+	u.v[0] = q.x;
+	u.v[1] = q.y;
+	u.v[2] = q.z;
+	float s = q.w;
+
+	// Dot products of u,v and u,u
+	float uvDot = (u.v[0] * v.v[0] + u.v[1] * v.v[1] + u.v[2] * v.v[2]);
+	float uuDot = (u.v[0] * u.v[0] + u.v[1] * u.v[1] + u.v[2] * u.v[2]);
+
+	// Calculate cross product of u, v
+	HmdVector3_t uvCross;
+	uvCross.v[0] = u.v[1] * v.v[2] - u.v[2] * v.v[1];
+	uvCross.v[1] = u.v[2] * v.v[0] - u.v[0] * v.v[2];
+	uvCross.v[2] = u.v[0] * v.v[1] - u.v[1] * v.v[0];
+
+	// Calculate each vectors' result individually because there aren't arthimetic functions for HmdVector3_t dsahfkldhsaklfhklsadh
+	result.v[0] = u.v[0] * 2.0f * uvDot
+		+ (s*s - uuDot) * v.v[0]
+		+ 2.0f * s * uvCross.v[0];
+	result.v[1] = u.v[1] * 2.0f * uvDot
+		+ (s*s - uuDot) * v.v[1]
+		+ 2.0f * s * uvCross.v[1];
+	result.v[2] = u.v[2] * 2.0f * uvDot
+		+ (s*s - uuDot) * v.v[2]
+		+ 2.0f * s * uvCross.v[2];
+
+	return result;
+}
+
+void QuatToYawPitchRoll(HmdQuaternion_t q, vec3_t out) {
+	float sqw = q.w*q.w;
+	float sqx = q.x*q.x;
+	float sqy = q.y*q.y;
+	float sqz = q.z*q.z;
+	float unit = sqx + sqy + sqz + sqw; // if normalised is one, otherwise is correction factor
+	float test = q.x*q.y + q.z*q.w;
+	if (test > 0.499*unit) { // singularity at north pole
+		out[YAW] = 2 * atan2(q.x, q.w) / M_PI_DIV_180;
+		out[ROLL] = -M_PI / 2 / M_PI_DIV_180;
+		out[PITCH] = 0;
+	}
+	else if (test < -0.499*unit) { // singularity at south pole
+		out[YAW] = -2 * atan2(q.x, q.w) / M_PI_DIV_180;
+		out[ROLL] = M_PI / 2 / M_PI_DIV_180;
+		out[PITCH] = 0;
+	}
+	else {
+		out[YAW] = atan2(2 * q.y*q.w - 2 * q.x*q.z, sqx - sqy - sqz + sqw) / M_PI_DIV_180;
+		out[ROLL] = -asin(2 * test / unit) / M_PI_DIV_180;
+		out[PITCH] = -atan2(2 * q.x*q.w - 2 * q.y*q.z, -sqx + sqy - sqz + sqw) / M_PI_DIV_180;
+	}
+}
+
+// void VR_AddOrientationToViewAngles(vec3_t angles)
+// {
+// 	vec3_t orientation;
+// 	QuatToYawPitchRoll(vr.eye[vr.current_eye]->orientation, orientation);
+// 
+// 	angles[PITCH] = angles[PITCH] + orientation[PITCH];
+// 	angles[YAW] = angles[YAW] + orientation[YAW];
+// 	angles[ROLL] = orientation[ROLL];
+// }

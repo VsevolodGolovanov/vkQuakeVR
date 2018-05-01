@@ -571,6 +571,104 @@ float angledelta (float a)
 	return a;
 }
 
+// Wolfenstein 3D, DOOM and QUAKE use the same coordinate/unit system:
+// 8 foot (96 inch) height wall == 64 units, 1.5 inches per pixel unit
+// 1.0 pixel unit / 1.5 inch == 0.666666 pixel units per inch
+static const float meters_to_units = 1.0f / (1.5f * 0.0254f);
+
+static vec3_t lastAim = { 0, 0, 0 };
+
+void UpdateControllerPos(void)
+{
+	// Controller vectors update
+	float lx, ly, lz, rx, ry, rz;
+	TrackedDevicePose_t* leftPose = VR_GetControllerPosition(ETrackedControllerRole_TrackedControllerRole_LeftHand, &lx, &ly, &lz);
+	TrackedDevicePose_t* rightPose = VR_GetControllerPosition(ETrackedControllerRole_TrackedControllerRole_RightHand, &rx, &ry, &rz);
+	if (leftPose != NULL)
+	{
+		HmdVector3_t rawControllerPos = Matrix34ToVector(leftPose->mDeviceToAbsoluteTracking);
+		HmdQuaternion_t rawControllerQuat = Matrix34ToQuaternion(leftPose->mDeviceToAbsoluteTracking);
+
+		vr.controllers[0].rawvector = rawControllerPos;
+		vr.controllers[0].raworientation = rawControllerQuat;
+		vr.controllers[0].position[0] = rawControllerPos.v[2];
+		vr.controllers[0].position[1] = rawControllerPos.v[0];
+		vr.controllers[0].position[2] = rawControllerPos.v[1];
+		QuatToYawPitchRoll(rawControllerQuat, vr.controllers[0].orientation);
+	}
+
+	if (rightPose != NULL) {
+		HmdVector3_t rawControllerPos = Matrix34ToVector(rightPose->mDeviceToAbsoluteTracking);
+		HmdQuaternion_t rawControllerQuat = Matrix34ToQuaternion(rightPose->mDeviceToAbsoluteTracking);
+
+		vr.controllers[1].rawvector = rawControllerPos;
+		vr.controllers[1].raworientation = rawControllerQuat;
+		vr.controllers[1].position[0] = rawControllerPos.v[2] * meters_to_units;
+		vr.controllers[1].position[1] = rawControllerPos.v[0] * meters_to_units;
+		vr.controllers[1].position[2] = rawControllerPos.v[1] * meters_to_units;
+		QuatToYawPitchRoll(rawControllerQuat, vr.controllers[1].orientation);
+	}
+
+	// Reset the aim roll value before calculation, incase the user switches aimmode from 7 to another.
+	cl.aimangles[ROLL] = 0.0;
+
+	cl.aimangles[PITCH] = vr.controllers[1].orientation[PITCH] + vr_gunangle.value;
+	cl.aimangles[YAW] = vr.controllers[1].orientation[YAW];
+	cl.aimangles[ROLL] = vr.controllers[1].orientation[ROLL];
+
+	// TODO: Add indipendant move angle for offhand controller
+	// TODO: Fix the weird roll bug with the gun viewmodel. Likely connected to using euler angles vs quaternions
+	// TODO: Fix shoot origin not being the gun's
+
+	// Controller offset vector for the gun viewmodel
+	HmdVector3_t gunOffset = { -5.0,0.0,8.0 };
+
+	// Convert the gun pitch cvar to a quaternion and rotate the gun offset vector
+	vec3_t gunPitchV3 = { vr.controllers[1].orientation[PITCH] + vr_gunangle.value, vr.controllers[1].orientation[YAW], vr.controllers[1].orientation[ROLL] };
+	HmdQuaternion_t gunPitchQuat = AnglesToHmdQuat(gunPitchV3);
+
+	gunOffset = RotateVectorByQuaternion(gunOffset, gunPitchQuat);
+	VectorCopy(gunOffset.v, cl.vmeshoffset)
+
+	// Update hand position values
+	entity_t *player = &cl_entities[cl.viewentity];
+
+	cl.handpos[0][0] = -vr.controllers[1].position[0] + player->origin[0];
+	cl.handpos[0][1] = -vr.controllers[1].position[1] + player->origin[1];
+	cl.handpos[0][2] = vr.controllers[1].position[2] + player->origin[2] + cl.viewheight;
+
+	cl.handpos[1][0] = -vr.controllers[1].position[0] + player->origin[0];
+	cl.handpos[1][1] = -vr.controllers[1].position[1] + player->origin[1];
+	cl.handpos[1][2] = vr.controllers[1].position[2] + player->origin[2] + cl.viewheight;
+
+	// Update hand rotations
+	VectorCopy(vr.controllers[0].orientation, cl.handrot[0])
+	VectorCopy(vr.controllers[1].orientation, cl.handrot[1])
+
+	// cl.viewangles[ROLL] = orientation[ROLL];
+
+	// VectorCopy(orientation, lastOrientation);
+	VectorCopy(cl.aimangles, lastAim);
+
+	VectorCopy(cl.viewangles, r_refdef.viewangles);
+	VectorCopy(cl.aimangles, r_refdef.aimangles);
+}
+
+void VR_SetAngles(vec3_t angles)
+{
+	VectorCopy(angles, cl.aimangles);
+	VectorCopy(angles, cl.viewangles);
+	VectorCopy(angles, lastAim);
+}
+
+void VR_ResetOrientation()
+{
+	cl.aimangles[YAW] = cl.viewangles[YAW];
+	cl.aimangles[PITCH] = cl.viewangles[PITCH];
+	// FIXME IVRSystem_ResetSeatedZeroPose(ovrHMD);
+	VectorCopy(cl.aimangles, lastAim);
+}
+
 /*
 ==================
 CalcGunAngle
@@ -581,6 +679,15 @@ void CalcGunAngle (void)
 	float	yaw, pitch, move;
 	static float oldyaw = 0;
 	static float oldpitch = 0;
+
+	UpdateControllerPos();
+
+	// Skip everything since we're doing VR Controller aiming.
+	// We should be using quaternons somewhere because otherwise roll is ALL OVER THE PLACE
+	cl.viewent.angles[YAW] = r_refdef.aimangles[YAW];
+	cl.viewent.angles[PITCH] = -(r_refdef.aimangles[PITCH]);
+	cl.viewent.angles[ROLL] = r_refdef.aimangles[ROLL];
+	return;
 
 	yaw = r_refdef.viewangles[YAW];
 	pitch = -r_refdef.viewangles[PITCH];
@@ -720,6 +827,11 @@ void V_CalcIntermissionRefdef (void)
 	VectorCopy (ent->angles, r_refdef.viewangles);
 	view->model = NULL;
 
+	r_refdef.viewangles[PITCH] = 0;
+	VectorCopy(r_refdef.viewangles, r_refdef.aimangles);
+	//VR_AddOrientationToViewAngles(r_refdef.viewangles);
+	VR_SetAngles(r_refdef.viewangles);
+
 // allways idle in intermission
 	old = v_idlescale.value;
 	v_idlescale.value = 1;
@@ -787,16 +899,21 @@ void V_CalcRefdef (void)
 	V_BoundOffsets ();
 
 // set up gun position
-	VectorCopy (cl.viewangles, view->angles);
+	VectorCopy (cl.aimangles, view->angles);
 
 	CalcGunAngle ();
 
-	VectorCopy (ent->origin, view->origin);
-	view->origin[2] += cl.viewheight;
+	// VR controller aiming configuration
+	vec3_t finalGunPos;
+	VectorAdd(cl.handpos[1], cl.vmeshoffset, finalGunPos)
+	VectorCopy(finalGunPos, view->origin)
 
-	for (i=0 ; i<3 ; i++)
-		view->origin[i] += forward[i]*bob*0.4;
-	view->origin[2] += bob;
+// 	VectorCopy (ent->origin, view->origin);
+// 	view->origin[2] += cl.viewheight;
+// 
+// 	for (i=0 ; i<3 ; i++)
+// 		view->origin[i] += forward[i]*bob*0.4;
+// 	view->origin[2] += bob;
 
 	//johnfitz -- removed all gun position fudging code (was used to keep gun from getting covered by sbar)
 
@@ -805,24 +922,25 @@ void V_CalcRefdef (void)
 	view->colormap = vid.colormap;
 
 //johnfitz -- v_gunkick
-	if (v_gunkick.value == 1) //original quake kick
-		VectorAdd (r_refdef.viewangles, cl.punchangle, r_refdef.viewangles);
-	if (v_gunkick.value == 2) //lerped kick
-	{
-		for (i=0; i<3; i++)
-			if (punch[i] != v_punchangles[0][i])
-			{
-				//speed determined by how far we need to lerp in 1/10th of a second
-				delta = (v_punchangles[0][i]-v_punchangles[1][i]) * host_frametime * 10;
-
-				if (delta > 0)
-					punch[i] = q_min(punch[i]+delta, v_punchangles[0][i]);
-				else if (delta < 0)
-					punch[i] = q_max(punch[i]+delta, v_punchangles[0][i]);
-			}
-
-		VectorAdd (r_refdef.viewangles, punch, r_refdef.viewangles);
-	}
+	// not in VR
+// 	if (v_gunkick.value == 1) //original quake kick
+// 		VectorAdd (r_refdef.viewangles, cl.punchangle, r_refdef.viewangles);
+// 	if (v_gunkick.value == 2) //lerped kick
+// 	{
+// 		for (i=0; i<3; i++)
+// 			if (punch[i] != v_punchangles[0][i])
+// 			{
+// 				//speed determined by how far we need to lerp in 1/10th of a second
+// 				delta = (v_punchangles[0][i]-v_punchangles[1][i]) * host_frametime * 10;
+// 
+// 				if (delta > 0)
+// 					punch[i] = q_min(punch[i]+delta, v_punchangles[0][i]);
+// 				else if (delta < 0)
+// 					punch[i] = q_max(punch[i]+delta, v_punchangles[0][i]);
+// 			}
+// 
+// 		VectorAdd (r_refdef.viewangles, punch, r_refdef.viewangles);
+// 	}
 //johnfitz
 
 // smooth out stair step ups
